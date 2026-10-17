@@ -1,0 +1,22 @@
+schema: spec-driven
+context: |
+  Project: grains (JUCE C++ granular synthesizer; product proposal in granular_synthesizer_proposal.md).
+  Stack: C++ / JUCE via Projucer (Grains.jucer, projectType guiapp, useAppConfig=0), VS2026 exporter at Builds/VisualStudio2026.
+  JUCE modules: audio_basics, audio_formats, core, data_structures, dsp, events, graphics, gui_basics (module paths ../../Projucer/modules).
+  Generated (do not hand-edit): JuceLibraryCode/, Builds/. Source/ is empty (no code yet).
+  Persistence: hybrid (openspec + engram). Artifacts in English.
+strict_tdd: true
+testing:
+  runner: none
+  note: "No test harness yet. First change must establish one (JUCE UnitTest console target or Catch2 via CMake) before TDD can run."
+  layers: {unit: false, integration: false, e2e: false}
+  coverage: false
+  quality: {linter: false, type_checker: false, formatter: false}
+rules:
+  proposal: {review_budget_lines: 800}
+  specs: {}
+  design: {}
+  tasks: {pr_strategy: auto-forecast, review_budget_lines: 800}
+  apply: {strict_tdd: true}
+  verify: {}
+  archive: {}
