@@ -54,17 +54,17 @@ User decisions (2026-10-17), all RESOLVED:
 
 ## PR1: Harness, limits, window, rng
 
-- [ ] 1.1 RED: `tests/CMakeLists.txt` (Catch2 v3.8.1 FetchContent, `catch_discover_tests`), `tests/test_harness.cpp`; configure fails (no root CMake)
-- [ ] 1.2 GREEN: root `CMakeLists.txt` (3.25, C++17, `GRAINS_BUILD_PLUGIN=OFF`, ON = FATAL_ERROR), `cmake/GrainsWarnings.cmake`, `.gitignore` `build/`; ctest green (R-BH-1, R-BH-2)
-- [ ] 1.3 Verify R-BH-2: temporary `REQUIRE(false)` makes ctest non-zero and names the case; revert
-- [ ] 1.4 Add configure-time check in `Source/core/CMakeLists.txt`: fail if `grains_core` links any `juce*` target
-- [ ] 1.5 RED: `tests/test_params_limits.cpp` (clamp ranges, NaN to default, density 0 off, sr clamp)
-- [ ] 1.6 GREEN: `Source/core/include/grains/ParamLimits.h`; create `grains_core` STATIC
-- [ ] 1.7 RED: `tests/test_window.cpp` (R-GR-1: endpoints 0, centre ~1, symmetry, 1000 random phases within 1e-3 of Hann)
-- [ ] 1.8 GREEN: `WindowTable.{h,cpp}` (4096-entry Hann, interpolated `at`)
-- [ ] 1.9 RED: `tests/test_rng.cpp` (same seed identical, different seed differs, `uniform01` in [0,1), `bipolar` in [-1,1], reseed)
-- [ ] 1.10 GREEN: `Rng.h` (PCG32, no globals)
-- [ ] 1.11 Update `openspec/config.yaml`: `runner: ctest`, `layers.unit: true` (R-BH-4); REFACTOR warnings clean under /W4 /WX
+- [x] 1.1 RED: `tests/CMakeLists.txt` (Catch2 v3.8.1 FetchContent, `catch_discover_tests`), `tests/test_harness.cpp`; configure fails (no root CMake)
+- [x] 1.2 GREEN: root `CMakeLists.txt` (3.25, C++17, `GRAINS_BUILD_PLUGIN=OFF`, ON = FATAL_ERROR), `cmake/GrainsWarnings.cmake`, `.gitignore` `build/`; ctest green (R-BH-1, R-BH-2)
+- [x] 1.3 Verify R-BH-2: temporary `REQUIRE(false)` makes ctest non-zero and names the case; revert
+- [x] 1.4 Add configure-time check in `Source/core/CMakeLists.txt`: fail if `grains_core` links any `juce*` target
+- [x] 1.5 RED: `tests/test_params_limits.cpp` (clamp ranges, NaN to default, density 0 off, sr clamp)
+- [x] 1.6 GREEN: `Source/core/include/grains/ParamLimits.h`; create `grains_core` STATIC
+- [x] 1.7 RED: `tests/test_window.cpp` (R-GR-1: endpoints 0, centre ~1, symmetry, 1000 random phases within 1e-3 of Hann)
+- [x] 1.8 GREEN: `WindowTable.{h,cpp}` (4096-entry Hann, interpolated `at`)
+- [x] 1.9 RED: `tests/test_rng.cpp` (same seed identical, different seed differs, `uniform01` in [0,1), `bipolar` in [-1,1], reseed)
+- [x] 1.10 GREEN: `Rng.h` (PCG32, no globals)
+- [x] 1.11 Update `openspec/config.yaml`: `runner: ctest`, `layers.unit: true` (R-BH-4); REFACTOR warnings clean under /W4 /WX
 
 ## PR2: SampleBuffer, pool, scheduler
 
