@@ -7,9 +7,9 @@ context: |
   Persistence: hybrid (openspec + engram). Artifacts in English.
 strict_tdd: true
 testing:
-  runner: none
-  note: "No test harness yet. First change must establish one (JUCE UnitTest console target or Catch2 via CMake) before TDD can run."
-  layers: {unit: false, integration: false, e2e: false}
+  runner: ctest
+  note: "Catch2 v3.8.1 via CMake FetchContent. Run: cmake -S . -B build && cmake --build build --config Debug && ctest --test-dir build -C Debug --output-on-failure"
+  layers: {unit: true, integration: false, e2e: false}
   coverage: false
   quality: {linter: false, type_checker: false, formatter: false}
 rules:
