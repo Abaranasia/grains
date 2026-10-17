@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<JUCERPROJECT id="Mc8nK4" name="Grains" projectType="guiapp" useAppConfig="0"
+              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1">
+  <MAINGROUP id="kKU5c7" name="Grains">
+    <GROUP id="{DD6B9F65-7299-4E30-EF37-C63353822454}" name="Source"/>
+  </MAINGROUP>
+  <MODULES>
+    <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_dsp" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+  </MODULES>
+  <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1"/>
+  <EXPORTFORMATS>
+    <VS2026 targetFolder="Builds/VisualStudio2026">
+      <CONFIGURATIONS>
+        <CONFIGURATION isDebug="1" name="Debug" targetName="Grains"/>
+        <CONFIGURATION isDebug="0" name="Release" targetName="Grains"/>
+      </CONFIGURATIONS>
+      <MODULEPATHS>
+        <MODULEPATH id="juce_core" path="../../Projucer/modules"/>
+        <MODULEPATH id="juce_data_structures" path="../../Projucer/modules"/>
+        <MODULEPATH id="juce_dsp" path="../../Projucer/modules"/>
+        <MODULEPATH id="juce_events" path="../../Projucer/modules"/>
+        <MODULEPATH id="juce_graphics" path="../../Projucer/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="../../Projucer/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="../../Projucer/modules"/>
+        <MODULEPATH id="juce_audio_basics" path="../../Projucer/modules"/>
+      </MODULEPATHS>
+    </VS2026>
+  </EXPORTFORMATS>
+</JUCERPROJECT>
