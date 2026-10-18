@@ -134,3 +134,19 @@ Modified: GranularEngine.h/.cpp, tests/CMakeLists.txt, tests/test_engine_bounds.
 ### Remaining
 - 4.5: tests/support/AllocationCounter.{h,cpp} (scoped, atomic counter active only inside an RAII scope; replacement of new/new[]/aligned and matching deletes) and tests/test_engine_realtime.cpp. Plan: separate executable `grains_realtime_tests` so the replacement operators do not affect the shared test binary.
 - 4.6: fix any allocation found, then final fresh-build ctest.
+
+## PR4b / Work Unit 4, part 2 (branch feat/granular-synth-04b-realtime): DONE (tasks 4.5-4.6; all 6/6 of PR4, change complete) + 1 PR4a follow-up
+
+### Implementation
+- tests/support/AllocationCounter.{h,cpp}: replaces every global operator new/new[] (plain, nothrow, align_val_t, aligned nothrow) and all matching deletes (plain, sized, nothrow, aligned, sized-aligned). Plain pair uses malloc/free; aligned pair uses _aligned_malloc/_aligned_free on MSVC (aligned_alloc/free elsewhere). Counting only while an RAII AllocationScope is alive (atomic flag + counter); deletes are never counted.
+- Separate executable `grains_realtime_tests` (tests/CMakeLists.txt, catch_discover_tests) so the replaced operators never touch `grains_tests`.
+- tests/test_engine_realtime.cpp (5 tests, prefixed "realtime:"): counter self-test (counts inside scope incl. over-aligned new, zero outside), normal settings, full pool (warm-up outside scope, REQUIRE saturated), parameter-extreme grid (48 combinations), block sizes 1/37/512/4096. Setup, setParams and buffer sizing are outside the scope (R-GR-8 constrains render calls only).
+- GranularEngine::activeGrainCount() const noexcept: read-only accessor over the pool counter, added for saturation assertions.
+
+### PR4a follow-up
+tests/test_engine_pool_full.cpp: removed hand-derived stopAt (6400/10000); now derived from GrainPool::kCapacity, period kSr/density and a per-case margin (1.05 / 1.6), rounded up to a block. Added REQUIRE(stopAt < window) and CHECK(activeAtStop == kCapacity). Mutation: engine density 200 instead of the 1000 used for derivation fails with 28 == 128; reverted.
+
+### TDD evidence
+- RED: realtime tests failed to compile (activeGrainCount missing) after the counter and tests existed; GREEN after the accessor: 5/5 pass.
+- Mutation: `std::vector<float> leak(n)` in GranularEngine::process fails 4 of 5 realtime tests (counter self-test still passes); reverted.
+- 4.6: no allocation found in the engine; no engine fix needed. Fresh build ctest: see final report.

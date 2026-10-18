@@ -43,3 +43,13 @@ target_include_directories(grains_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(grains_tests PRIVATE grains_core Catch2::Catch2WithMain)
 grains_set_warnings(grains_tests)
 catch_discover_tests(grains_tests)
+
+# R-GR-8 zero-allocation tests live in their own executable: AllocationCounter.cpp replaces the
+# global operator new/delete, which must not affect the shared grains_tests binary.
+add_executable(grains_realtime_tests
+  support/AllocationCounter.cpp
+  test_engine_realtime.cpp)
+target_include_directories(grains_realtime_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(grains_realtime_tests PRIVATE grains_core Catch2::Catch2WithMain)
+grains_set_warnings(grains_realtime_tests)
+catch_discover_tests(grains_realtime_tests)

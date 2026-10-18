@@ -96,5 +96,5 @@ User decisions (2026-10-17), all RESOLVED:
 - [x] 4.2 RED+GREEN: `tests/test_engine_extremes.cpp`: grid size/pitch/density/position per R-GR-7, finite and |y|<=4.0; sample rates 22050-192000; denormal-free silence; worst-case coherent DC at full pool vs ceiling
 - [x] 4.3 RED+GREEN: RMS test, noise source, 50 ms, 20 vs 400 gr/s within 3 dB; density-sweep step bound (amended R-GR-5)
 - [x] 4.4 RED+GREEN: skip-draw test: saturated pool leaves active grain output identical to unsaturated first 128 (R-GS-6)
-- [ ] 4.5 RED: `tests/support/AllocationCounter.{h,cpp}` (replace `new/new[]/aligned`, RAII scope) and `tests/test_engine_realtime.cpp`: 0 allocations normal, pool-full, extremes, block sizes up to 4096 (R-GR-8)
-- [ ] 4.6 GREEN: fix any engine allocation or ceiling breach found; final `ctest` green on a fresh build dir
+- [x] 4.5 RED: `tests/support/AllocationCounter.{h,cpp}` (replace `new/new[]/aligned`, RAII scope) and `tests/test_engine_realtime.cpp`: 0 allocations normal, pool-full, extremes, block sizes up to 4096 (R-GR-8)
+- [x] 4.6 GREEN: fix any engine allocation or ceiling breach found; final `ctest` green on a fresh build dir
