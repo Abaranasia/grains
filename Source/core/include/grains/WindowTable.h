@@ -11,7 +11,7 @@ public:
 
     WindowTable();
 
-    // phase01 outside [0, 1] is clamped.
+    // phase01 outside [0, 1] (or NaN) returns 0, i.e. the window is zero outside the grain.
     float at(float phase01) const noexcept;
 
 private:

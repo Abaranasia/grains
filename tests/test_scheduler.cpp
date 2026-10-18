@@ -1,0 +1,161 @@
+#include <catch2/catch_test_macros.hpp>
+
+#include <grains/GrainPool.h>
+
+#include "support/SchedulerHelpers.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <limits>
+#include <vector>
+
+using grains_test::run;
+using grains_test::Spawn;
+
+TEST_CASE("scheduler: periodic 100 gr/s gives 100 spawns 480 apart", "[scheduler]")
+{
+    const auto sp = run(1, 48000.0, 100.0f, 0.0f, 48000, {512});
+    REQUIRE(sp.size() == 100);
+    CHECK(sp.front().time == 0); // first spawn at sample 0
+    for (std::size_t i = 1; i < sp.size(); ++i)
+        CHECK(sp[i].time - sp[i - 1].time == 480);
+}
+
+TEST_CASE("scheduler: fractional period has no drift over 10 s", "[scheduler]")
+{
+    const double sr = 48000.0, period = sr / 70.0;
+    const auto sp = run(1, sr, 70.0f, 0.0f, 480000, {512});
+    CHECK(std::abs(static_cast<int>(sp.size()) - 700) <= 1);
+    for (std::size_t k = 0; k < sp.size(); ++k)
+        CHECK(std::abs(static_cast<double>(sp[k].time) - static_cast<double>(k) * period) <= 1.0);
+}
+
+TEST_CASE("scheduler: drift stays below 1 sample over 1e6 samples", "[scheduler]")
+{
+    const double sr = 44100.0, period = sr / 33.0;
+    const auto sp = run(3, sr, 33.0f, 0.0f, 1000000, {480});
+    REQUIRE(sp.size() > 700);
+    for (std::size_t k = 0; k < sp.size(); ++k)
+        REQUIRE(std::abs(static_cast<double>(sp[k].time) - static_cast<double>(k) * period) <= 1.0);
+}
+
+TEST_CASE("scheduler: zero density spawns nothing", "[scheduler]")
+{
+    CHECK(run(1, 48000.0, 0.0f, 0.5f, 96000, {512}).empty());
+}
+
+TEST_CASE("scheduler: offsets stay inside the block", "[scheduler]")
+{
+    // The bounds are asserted inside run() for every spawn.
+    for (int b : {1, 7, 64, 480, 481, 4096})
+        CHECK_FALSE(run(5, 48000.0, 300.0f, 0.7f, 20000, {b}).empty());
+}
+
+TEST_CASE("scheduler: block split invariance", "[scheduler]")
+{
+    const std::int64_t total = 48000;
+    const auto whole = run(9, 48000.0, 150.0f, 0.6f, total, {48000});
+    REQUIRE(whole.size() > 100);
+    CHECK(run(9, 48000.0, 150.0f, 0.6f, total, {64}) == whole);
+    CHECK(run(9, 48000.0, 150.0f, 0.6f, total, {1}) == whole);
+    CHECK(run(9, 48000.0, 150.0f, 0.6f, total, {1, 3, 4095, 17, 512, 2, 999}) == whole);
+}
+
+TEST_CASE("scheduler: jitter 0 ignores the seed", "[scheduler]")
+{
+    const auto a = run(1, 48000.0, 90.0f, 0.0f, 48000, {256});
+    const auto b = run(2, 48000.0, 90.0f, 0.0f, 48000, {256});
+    REQUIRE(a.size() == b.size());
+    for (std::size_t i = 0; i < a.size(); ++i)
+        CHECK(a[i].time == b[i].time);
+}
+
+TEST_CASE("scheduler: same seed reproducible, different seed differs", "[scheduler]")
+{
+    const auto a = run(12345, 48000.0, 100.0f, 0.5f, 48000, {256});
+    const auto b = run(12345, 48000.0, 100.0f, 0.5f, 48000, {256});
+    const auto c1 = run(1, 48000.0, 100.0f, 0.5f, 48000, {256});
+    const auto c2 = run(2, 48000.0, 100.0f, 0.5f, 48000, {256});
+    CHECK(a == b);
+    CHECK_FALSE(c1 == c2);
+}
+
+TEST_CASE("scheduler: jitter 1 preserves the mean rate", "[scheduler]")
+{
+    const std::int64_t total = 60 * 48000;
+    double meanPerSecond = 0.0;
+    for (std::uint64_t seed = 1; seed <= 20; ++seed)
+        meanPerSecond += static_cast<double>(run(seed, 48000.0, 100.0f, 1.0f, total, {512}).size()) / 60.0;
+    meanPerSecond /= 20.0;
+    CHECK(meanPerSecond > 95.0);
+    CHECK(meanPerSecond < 105.0);
+}
+
+TEST_CASE("scheduler: spawn times are monotonic under jitter", "[scheduler]")
+{
+    const auto sp = run(4, 48000.0, 1000.0f, 1.0f, 96000, {128});
+    REQUIRE(sp.size() > 100);
+    for (std::size_t i = 1; i < sp.size(); ++i)
+        CHECK(sp[i].time >= sp[i - 1].time);
+}
+
+TEST_CASE("scheduler: extreme parameters are clamped", "[scheduler]")
+{
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    CHECK(run(1, 48000.0, -5.0f, 0.0f, 48000, {512}).empty());
+    const auto fast = run(1, 48000.0, 1e9f, 0.0f, 48000, {512});
+    CHECK(fast.size() >= 1000);
+    CHECK(fast.size() <= 1001);
+    const auto def = run(1, 48000.0, nan, 0.0f, 48000, {512});
+    CHECK(def.size() >= 20);
+    CHECK(def.size() <= 21);
+    CHECK(run(1, 48000.0, 100.0f, -1.0f, 48000, {512}) == run(1, 48000.0, 100.0f, 0.0f, 48000, {512}));
+    CHECK(run(1, 48000.0, 100.0f, 7.0f, 48000, {512}) == run(1, 48000.0, 100.0f, 1.0f, 48000, {512}));
+    CHECK(run(1, 48000.0, 100.0f, nan, 48000, {512}) == run(1, 48000.0, 100.0f, 0.0f, 48000, {512}));
+}
+
+TEST_CASE("scheduler: tiny interval floors at one sample", "[scheduler]")
+{
+    // 1000 gr/s at the minimum sample rate has a 8-sample period; jitter must never go below 1.
+    const auto sp = run(6, 8000.0, 1000.0f, 1.0f, 80000, {64});
+    for (std::size_t i = 1; i < sp.size(); ++i)
+        CHECK(sp[i].time >= sp[i - 1].time);
+    CHECK(sp.size() > 5000);
+}
+
+TEST_CASE("scheduler: skip-on-full leaves the due times unchanged and reuses freed slots", "[scheduler]")
+{
+    // Long grains at high density saturate the pool. The schedule must not depend on acceptance.
+    const std::int64_t total = 96000;
+    const std::int64_t grainLength = 10000;
+    const auto due = run(8, 48000.0, 1000.0f, 0.3f, total, {256});
+
+    grains::GrainPool pool;
+    int accepted = 0, skipped = 0, maxActive = 0;
+    bool skippedWhileNotFull = false;
+    std::vector<std::int64_t> dueLimited;
+    for (const Spawn& sp : due) {
+        pool.forEachActive([&](grains::Grain& g) {
+            if (static_cast<std::int64_t>(g.pos) + g.length <= sp.time) pool.release(g);
+        });
+        dueLimited.push_back(sp.time);
+        if (grains::Grain* g = pool.acquire()) {
+            g->pos = static_cast<double>(sp.time);
+            g->length = static_cast<int>(grainLength);
+            ++accepted;
+        } else {
+            ++skipped;
+            skippedWhileNotFull = skippedWhileNotFull || pool.activeCount() != grains::GrainPool::kCapacity;
+        }
+        maxActive = std::max(maxActive, pool.activeCount());
+    }
+    std::vector<std::int64_t> dueUnlimited;
+    for (const Spawn& sp : due) dueUnlimited.push_back(sp.time);
+
+    CHECK(dueLimited == dueUnlimited);
+    CHECK(maxActive == grains::GrainPool::kCapacity);
+    CHECK(skipped > 0);
+    CHECK_FALSE(skippedWhileNotFull);
+    CHECK(accepted > grains::GrainPool::kCapacity); // freed slots were reused
+}

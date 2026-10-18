@@ -29,3 +29,34 @@ Changed lines: ~16+/14- tracked, ~426 untracked (total ~455).
 - Window: table[i]=Hann(i/(kSize-1)); at() interpolates over kSize-1 intervals, out-of-range/NaN -> 0.
 - Rng seeds like pcg32_srandom_r(seed, stream 54).
 - Test names use "group: description" prefix so ctest -R works.
+
+## PR2 / Work Unit 2 (branch feat/granular-synth-02-pool-scheduler): DONE (tasks 2.1-2.9, 9/9)
+
+### TDD evidence
+| Task | RED | GREEN |
+|------|-----|-------|
+| 2.1/2.2 | build error C1083: grains/SampleBuffer.h not found | 22/22 passed (6 buffer cases) |
+| 2.3/2.4 | build error C1083: grains/GrainPool.h not found | 28/28 passed (6 pool cases) |
+| 2.5/2.6/2.7 | build error C1083: grains/GrainScheduler.h not found (2.5 and 2.6 tests written together, one RED) | 41/41 passed |
+| 2.8 | schedule test passed on first run (scheduler is pool-independent by construction); asserts due-time equality, max active 128, no skip while not full, slot reuse (accepted > 128) | 41/41 |
+| 2.9 | moved Spawn/run helper to tests/support/SchedulerHelpers.h | 41/41; focused `-R "buffer|pool|scheduler"` 25/25 |
+
+Fresh build dir: clean under /W4 /WX; full ctest 41/41.
+
+### PR1 follow-ups included
+1. JUCE-free guard: deferred (`cmake_language(DEFER)`) recursive check of LINK_LIBRARIES and INTERFACE_LINK_LIBRARIES; verified with a temp `target_link_libraries(grains_core INTERFACE juce_fake)` added after the subdirectory -> FATAL_ERROR; reverted.
+2. Catch2 pinned to commit 2b60af89e23d28eefc081bc930831ee9d45ea58b (v3.8.1 peeled tag); GIT_SHALLOW dropped (unreliable with SHA); offline via FIND_PACKAGE_ARGS 3 (-DFETCHCONTENT_TRY_FIND_PACKAGE_MODE=ALWAYS) or FETCHCONTENT_SOURCE_DIR_CATCH2.
+3. WindowTable.h comment corrected: out-of-range/NaN returns 0 (not clamped).
+
+### Files
+New: Source/core/include/grains/{SampleBuffer,Grain,GrainPool,GrainScheduler}.h, Source/core/src/{SampleBuffer,GrainScheduler}.cpp,
+tests/test_{sample_buffer,pool,scheduler}.cpp, tests/support/SchedulerHelpers.h.
+Modified: Source/core/CMakeLists.txt, tests/CMakeLists.txt, WindowTable.h, tasks.md, apply-progress.md.
+
+### Deviations
+- Scheduler tracks an absolute double time (`nextTime_`) plus int64 `blockStart_` instead of design's per-block `samplesUntilNext`: guarantees bit-identical spawn times for any split (relative accumulation rounds differently per split). Offset = floor(nextTime_) - blockStart_.
+- Rng drawn once per spawn always (also at jitter 0) for fixed consumption; design said "only at spawn", consistent.
+- Idle (density 0) time is not banked: on re-enabling, next spawn is clamped to the current block start (no burst).
+- SampleBuffer: mismatched right channel size is ignored (mono); empty left gives 0 channels.
+- GrainPool: acquire resets the slot to a default Grain with active=true; lowest-index free slot.
+- Task 2.8 test used a simulation with GrainPool; Grain::pos/length used as start/length bookkeeping in the test only.
