@@ -49,7 +49,7 @@ void GranularEngine::process(float* left, float* right, int n) noexcept
     scheduler_.advance(n, [&](int offset) {
         renderSegment(left, right, cursor, offset - cursor);
         cursor = offset;
-        spawn(offset);
+        spawn();
     });
     renderSegment(left, right, cursor, n - cursor);
 
@@ -74,7 +74,7 @@ void GranularEngine::renderSegment(float* left, float* right, int offset, int co
     });
 }
 
-void GranularEngine::spawn(int /*offset*/) noexcept
+void GranularEngine::spawn() noexcept
 {
     // Fixed draw order and count, before any pool or bounds check, so skipped spawns consume the
     // same random stream as accepted ones (the schedule never depends on pool state).

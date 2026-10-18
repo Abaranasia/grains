@@ -106,3 +106,31 @@ Modified: Source/core/CMakeLists.txt, tests/CMakeLists.txt, tasks.md, apply-prog
 - setSource resets the pool; no source / empty source => exact zeros and the scheduler is not advanced.
 - setParams calls EngineParams::clamped() and reconfigures the scheduler.
 - OOB is checked by guarded-buffer interpolator tests and finite/bounded engine output; no sanitizer run.
+
+## PR4a / Work Unit 4, part 1 (branch feat/granular-synth-04a-hardening): DONE (tasks 4.1-4.4, 4/6) + 4 PR3b follow-ups
+
+PR4 hit the ~700-line cap before 4.5 and was split: PR4a (follow-ups, tasks 4.1-4.4) and PR4b (AllocationCounter + realtime zero-alloc tests, tasks 4.5-4.6).
+
+Stopped at the ~700 changed-line cap (about 713 lines of tests/support/doc before 4.5). 4.5 (AllocationCounter + realtime tests) and the fix half of 4.6 remain; the fresh-build full ctest half of 4.6 was run (73/73) but 4.6 stays open until 4.5 lands.
+
+### PR3b review follow-ups (done first)
+1. GranularEngine.h ceiling doc corrected: the clamp engages for coherent (DC-like) material. Measured pre-clamp peak: constant-1 source, density 200, size 1000 ms, gain 2 -> about 9.3 (gain 1 -> about 4.6; gain 0.5 stays below 4). No gain change; the +-4 clamp is the R-GR-7 documented bound, so no spec violation.
+2. New test "move-back fallback renders a 2-sample grain inside the source" (position 1.0, ramp source, rates 1 and 2: only L[1] non-zero = src[start+rate]*cos(pi/4)). Mutation checks: fallback start kept at `last`, fallback length 3, and removing the `start < 0` skip all fail the tests; reverted.
+3. "tiny sources" test is now discriminating: 1-frame silent; 2 frames silent at rate 1 and sound at rate 0.25 (-24 st); 3 frames sound at rate 1 and silent at rate 4 (+24 st). Sounding cases assert the exact value 0.8*cos(pi/4).
+4. `spawn(int)` unused parameter removed (header, definition, call site). Test kPi and helpers moved to tests/support/EngineHelpers.h (single `grains_test::kPi`).
+
+### TDD evidence
+| Task | Tests | RED/GREEN | Mutation check |
+|------|-------|-----------|----------------|
+| 4.1 | test_engine_determinism.cpp (3) | characterization: passed first run | extra block-dependent RNG draw fails block-split; shared static state fails all three |
+| 4.2 | test_engine_extremes.cpp (4) | passed first run (grid uses a mostly-DC source so the clamp matters; 0.25 s per combination instead of 1 s for Debug speed) | removing the +-4 clamp fails grid and DC test; removing the flush fails the denormal test |
+| 4.3 | test_engine_loudness.cpp (2); RMS test moved here from bounds (now 5 s, noise+sine, 2 seeds, stereo) | passed first run | no normalization fails RMS; active-count-dependent render gain fails RMS and the sweep step bound |
+| 4.4 | test_engine_pool_full.cpp (1, two configs) | passed after fixing the test (first version used a short source so grains shrank and freed slots) | kCapacity 256 fails |
+
+### Files
+New: tests/support/EngineHelpers.h, tests/test_engine_{determinism,extremes,loudness,pool_full}.cpp.
+Modified: GranularEngine.h/.cpp, tests/CMakeLists.txt, tests/test_engine_bounds.cpp, tasks.md, apply-progress.md.
+
+### Remaining
+- 4.5: tests/support/AllocationCounter.{h,cpp} (scoped, atomic counter active only inside an RAII scope; replacement of new/new[]/aligned and matching deletes) and tests/test_engine_realtime.cpp. Plan: separate executable `grains_realtime_tests` so the replacement operators do not affect the shared test binary.
+- 4.6: fix any allocation found, then final fresh-build ctest.

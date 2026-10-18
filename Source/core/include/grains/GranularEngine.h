@@ -17,8 +17,14 @@ namespace grains {
 //
 // Output bounds: every output sample is flushed to 0 below kFlushThreshold (denormals, NaN) and
 // clamped to +-kOutputCeiling. Per-grain gain is gain * 1/sqrt(max(1, density * sizeSeconds))
-// times the constant-power pan factor (<= 1), so for inputs in [-1, 1] the clamp is a safety net
-// and not part of normal operation.
+// times the constant-power pan factor (<= 1). For uncorrelated material (noise, music) the
+// overlap sum stays far below the ceiling and the clamp is only a safety net. It DOES engage for
+// strongly correlated material (constant/DC-like sources) once many grains overlap: the sum then
+// grows like the number of overlapping grains (up to the 128-slot pool) while the normalisation
+// only divides by sqrt(density * size). Measured with a constant-1 source, position 0, pan centre:
+// density 200 gr/s, size 1000 ms, gain 2 reaches a pre-clamp peak of about 9.3 (gain 1: about
+// 4.6), so the output is hard-clipped at +-4 there. Gain behaviour is deliberately unchanged
+// (design: fixed per-grain gain); the ceiling is the documented bound of R-GR-7.
 //
 // Segment loop: process() renders active grains up to each spawn offset, releases finished
 // grains, then spawns. The scheduler callback does this inline (rendering interleaved inside the
@@ -49,7 +55,7 @@ public:
 
 private:
     void renderSegment(float* left, float* right, int offset, int count) noexcept;
-    void spawn(int offset) noexcept;
+    void spawn() noexcept;
 
     Rng rng_;
     GrainScheduler scheduler_;
