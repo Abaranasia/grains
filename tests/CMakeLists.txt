@@ -1,14 +1,26 @@
-include(FetchContent)
-FetchContent_Declare(Catch2
-  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-  # v3.8.1, pinned to the commit SHA so a moved tag cannot change the build.
-  GIT_TAG        2b60af89e23d28eefc081bc930831ee9d45ea58b
-  SYSTEM
-  # Offline: -DFETCHCONTENT_TRY_FIND_PACKAGE_MODE=ALWAYS uses an installed Catch2 3.x,
-  # or -DFETCHCONTENT_SOURCE_DIR_CATCH2=<path> uses a local checkout.
-  FIND_PACKAGE_ARGS 3)
-FetchContent_MakeAvailable(Catch2)
-list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
+# Catch2 is fetched at a pinned commit by default so every build uses the same bytes. An
+# installed Catch2 is never picked up implicitly (no FIND_PACKAGE_ARGS). Offline options:
+#   -DFETCHCONTENT_SOURCE_DIR_CATCH2=<path>   use a local checkout (honoured by FetchContent)
+#   -DGRAINS_USE_SYSTEM_CATCH2=ON             explicitly opt in to an installed Catch2 3.x
+option(GRAINS_USE_SYSTEM_CATCH2 "Use an installed Catch2 3.x instead of the pinned fetch" OFF)
+
+if(GRAINS_USE_SYSTEM_CATCH2)
+  find_package(Catch2 3 REQUIRED)
+else()
+  include(FetchContent)
+  FetchContent_Declare(Catch2
+    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+    # v3.8.1, pinned to the commit SHA so a moved tag cannot change the build.
+    GIT_TAG        2b60af89e23d28eefc081bc930831ee9d45ea58b
+    SYSTEM)
+  FetchContent_MakeAvailable(Catch2)
+endif()
+
+# catch_discover_tests lives in Catch.cmake: shipped in extras/ of a source tree; an installed
+# package already makes it available through find_package.
+if(catch2_SOURCE_DIR)
+  list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
+endif()
 include(Catch)
 
 add_executable(grains_tests
@@ -18,7 +30,10 @@ add_executable(grains_tests
   test_rng.cpp
   test_sample_buffer.cpp
   test_pool.cpp
-  test_scheduler.cpp)
+  test_scheduler.cpp
+  test_interpolator.cpp
+  test_grain_render.cpp
+  test_params.cpp)
 target_include_directories(grains_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(grains_tests PRIVATE grains_core Catch2::Catch2WithMain)
 grains_set_warnings(grains_tests)

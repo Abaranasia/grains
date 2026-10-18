@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <utility>
 #include <vector>
 
 using grains_test::run;
@@ -117,45 +118,100 @@ TEST_CASE("scheduler: extreme parameters are clamped", "[scheduler]")
 
 TEST_CASE("scheduler: tiny interval floors at one sample", "[scheduler]")
 {
-    // 1000 gr/s at the minimum sample rate has a 8-sample period; jitter must never go below 1.
+    // 1000 gr/s at the minimum sample rate has an 8-sample period; with jitter 1 the raw
+    // interval is 8*(1+bipolar) in [0, 16), so without the floor intervals below one sample
+    // (and therefore coincident spawn times) would occur.
     const auto sp = run(6, 8000.0, 1000.0f, 1.0f, 80000, {64});
-    for (std::size_t i = 1; i < sp.size(); ++i)
-        CHECK(sp[i].time >= sp[i - 1].time);
-    CHECK(sp.size() > 5000);
+    REQUIRE(sp.size() > 5000);
+    std::int64_t minGap = std::numeric_limits<std::int64_t>::max();
+    for (std::size_t i = 1; i < sp.size(); ++i) {
+        CHECK(sp[i].time > sp[i - 1].time); // strictly increasing
+        minGap = std::min(minGap, sp[i].time - sp[i - 1].time);
+    }
+    CHECK(minGap >= 1);
 }
+
+namespace {
+
+struct PoolRun {
+    std::vector<std::int64_t> due;   // every due spawn time, accepted or skipped
+    int accepted = 0;
+    int skipped = 0;
+    int maxActive = 0;
+    bool skippedWhileNotFull = false;
+};
+
+// Drives a scheduler that shares its Rng with the spawn callback (as the engine does). The
+// callback always takes one draw per due spawn; with a pool it then tries to acquire a slot and
+// frees grains whose end time has passed. `skipDrawOnFull` mimics a wrong engine that skips the
+// draw when the pool is full, which desynchronises the shared stream.
+PoolRun simulate(bool usePool, std::int64_t grainLength, bool skipDrawOnFull = false)
+{
+    grains::Rng rng(8);
+    grains::GrainScheduler sched(rng);
+    sched.configure(48000.0, 1000.0f, 0.3f);
+    sched.reset();
+
+    grains::GrainPool pool;
+    std::vector<std::pair<grains::Grain*, std::int64_t>> live; // slot and absolute end time
+    PoolRun r;
+    const std::int64_t total = 96000;
+    const int block = 256;
+    for (std::int64_t done = 0; done < total; done += block) {
+        sched.advance(block, [&](int offset) {
+            const std::int64_t t = done + offset;
+            r.due.push_back(t);
+            bool ok = true;
+            if (usePool) {
+                for (std::size_t i = 0; i < live.size();) {
+                    if (live[i].second <= t) {
+                        pool.release(*live[i].first);
+                        live[i] = live.back();
+                        live.pop_back();
+                    } else {
+                        ++i;
+                    }
+                }
+                grains::Grain* g = pool.acquire();
+                ok = g != nullptr;
+                if (ok) {
+                    live.emplace_back(g, t + grainLength);
+                    ++r.accepted;
+                } else {
+                    ++r.skipped;
+                    r.skippedWhileNotFull = r.skippedWhileNotFull || pool.activeCount() != grains::GrainPool::kCapacity;
+                }
+                r.maxActive = std::max(r.maxActive, pool.activeCount());
+            }
+            if (ok || !skipDrawOnFull) (void)rng.uniform01();
+        });
+    }
+    return r;
+}
+
+} // namespace
 
 TEST_CASE("scheduler: skip-on-full leaves the due times unchanged and reuses freed slots", "[scheduler]")
 {
-    // Long grains at high density saturate the pool. The schedule must not depend on acceptance.
-    const std::int64_t total = 96000;
+    // ~1000 gr/s with 10000-sample grains wants ~208 concurrent grains: a 128 pool must saturate.
     const std::int64_t grainLength = 10000;
-    const auto due = run(8, 48000.0, 1000.0f, 0.3f, total, {256});
+    const PoolRun free = simulate(false, grainLength);
+    const PoolRun pooled = simulate(true, grainLength);
 
-    grains::GrainPool pool;
-    int accepted = 0, skipped = 0, maxActive = 0;
-    bool skippedWhileNotFull = false;
-    std::vector<std::int64_t> dueLimited;
-    for (const Spawn& sp : due) {
-        pool.forEachActive([&](grains::Grain& g) {
-            if (static_cast<std::int64_t>(g.pos) + g.length <= sp.time) pool.release(g);
-        });
-        dueLimited.push_back(sp.time);
-        if (grains::Grain* g = pool.acquire()) {
-            g->pos = static_cast<double>(sp.time);
-            g->length = static_cast<int>(grainLength);
-            ++accepted;
-        } else {
-            ++skipped;
-            skippedWhileNotFull = skippedWhileNotFull || pool.activeCount() != grains::GrainPool::kCapacity;
-        }
-        maxActive = std::max(maxActive, pool.activeCount());
-    }
-    std::vector<std::int64_t> dueUnlimited;
-    for (const Spawn& sp : due) dueUnlimited.push_back(sp.time);
+    // The pool really participated: it filled up and spawns were skipped.
+    CHECK(pooled.maxActive == grains::GrainPool::kCapacity);
+    CHECK_FALSE(pooled.skippedWhileNotFull);
 
-    CHECK(dueLimited == dueUnlimited);
-    CHECK(maxActive == grains::GrainPool::kCapacity);
-    CHECK(skipped > 0);
-    CHECK_FALSE(skippedWhileNotFull);
-    CHECK(accepted > grains::GrainPool::kCapacity); // freed slots were reused
+    // Skipped spawns do not shift later due times: identical schedule with and without a pool.
+    REQUIRE(pooled.due.size() == free.due.size());
+    CHECK(pooled.due == free.due);
+
+    // Skips happened and freed slots were reused (more accepted spawns than capacity).
+    CHECK(pooled.skipped > 0);
+    CHECK(pooled.accepted > grains::GrainPool::kCapacity);
+    CHECK(pooled.accepted + pooled.skipped == static_cast<int>(pooled.due.size()));
+
+    // Sensitivity: a callback that skips its draw on a full pool desynchronises the shared Rng
+    // and changes later due times, so this test would catch it.
+    CHECK_FALSE(simulate(true, grainLength, true).due == free.due);
 }

@@ -80,12 +80,12 @@ User decisions (2026-10-17), all RESOLVED:
 
 ## PR3: Interpolator, grain render, engine
 
-- [ ] 3.1 RED: `tests/test_interpolator.cpp` (exact at integers, midpoints, last-sample read stays in range, no OOB under guarded buffer)
-- [ ] 3.2 GREEN: `Interpolator.h` (`LinearInterpolator`, `InterpolationMode`, index clamp guard)
-- [ ] 3.3 RED: `tests/test_grain_render.cpp`: unity pitch equals `window(n/256)*src[1000+n]` within 1e-6; +12 st reads `2n` within 1e-5; start unchanged by pitch (R-GR-2)
-- [ ] 3.4 GREEN: `renderGrain<Interp>` in `Grain.h`
-- [ ] 3.5 RED: `tests/test_params.cpp` (EngineParams clamp table incl. NaN, pitch 100 equals 24)
-- [ ] 3.6 GREEN: `EngineParams.h`, clamp in `setParams`
+- [x] 3.1 RED: `tests/test_interpolator.cpp` (exact at integers, midpoints, last-sample read stays in range, no OOB under guarded buffer)
+- [x] 3.2 GREEN: `Interpolator.h` (`LinearInterpolator`, `InterpolationMode`, index clamp guard)
+- [x] 3.3 RED: `tests/test_grain_render.cpp`: unity pitch equals `window(n/256)*src[1000+n]` within 1e-6; +12 st reads `2n` within 1e-5; start unchanged by pitch (R-GR-2)
+- [x] 3.4 GREEN: `renderGrain<Interp>` in `Grain.h`
+- [x] 3.5 RED: `tests/test_params.cpp` (EngineParams clamp table incl. NaN, pitch 100 equals 24)
+- [x] 3.6 GREEN: `EngineParams.h`, clamp in `setParams`
 - [ ] 3.7 RED: `tests/test_engine_bounds.cpp`: near-end grain shrinks, no OOB, no step above window slope bound; tiny 1/2-sample source finite; density 0 or null source gives exact 0.0; mono equals dual-mono; spread 0 centres (R-GR-3, 4, 5)
 - [ ] 3.8 GREEN: `GranularEngine.{h,cpp}` (segment loop, spawn bounds, fixed 3 draws before skip, pan, norm gain, flush+ceiling pass)
 - [ ] 3.9 REFACTOR: constants to named values, document ceiling and gain bound
