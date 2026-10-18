@@ -68,15 +68,15 @@ User decisions (2026-10-17), all RESOLVED:
 
 ## PR2: SampleBuffer, pool, scheduler
 
-- [ ] 2.1 RED: `tests/test_sample_buffer.cpp` (mono/stereo accessors, immutable, empty, 1-frame)
-- [ ] 2.2 GREEN: `SampleBuffer.{h,cpp}`
-- [ ] 2.3 RED: `tests/test_pool.cpp` (capacity 128, acquire returns nullptr when full, release reuse, index-order `forEachActive`, reset)
-- [ ] 2.4 GREEN: `Grain.h` (struct only), `GrainPool.h`
-- [ ] 2.5 RED: `tests/test_scheduler.cpp`: periodic 100 gr/s gives 100 spawns 480 apart; D=70 over 10 s within +-1 sample of k*fs/D; D=0 none; offsets in [0,B); first spawn at 0 (R-GS-1, R-GS-3)
-- [ ] 2.6 RED: same file: block-split invariance (1, 64, 1-sample, irregular); jitter 0 ignores seed; same seed identical, seeds 1/2 differ; jitter=1 mean within 5% over 20 seeds x 60 s; monotonic; clamp extremes D=-5/1e9/NaN, jitter -1/7 (R-GS-2, 4, 5, 7)
-- [ ] 2.7 GREEN: `GrainScheduler.{h,cpp}` (double accumulator, `T*(1+j*bipolar())` floored at 1, floor offset, uses ParamLimits)
-- [ ] 2.8 RED+GREEN: skip-on-full schedule test: capacity 128 vs unlimited gives identical due-times; freed slot is reused (R-GS-6)
-- [ ] 2.9 REFACTOR: shared test helpers in `tests/support/`
+- [x] 2.1 RED: `tests/test_sample_buffer.cpp` (mono/stereo accessors, immutable, empty, 1-frame)
+- [x] 2.2 GREEN: `SampleBuffer.{h,cpp}`
+- [x] 2.3 RED: `tests/test_pool.cpp` (capacity 128, acquire returns nullptr when full, release reuse, index-order `forEachActive`, reset)
+- [x] 2.4 GREEN: `Grain.h` (struct only), `GrainPool.h`
+- [x] 2.5 RED: `tests/test_scheduler.cpp`: periodic 100 gr/s gives 100 spawns 480 apart; D=70 over 10 s within +-1 sample of k*fs/D; D=0 none; offsets in [0,B); first spawn at 0 (R-GS-1, R-GS-3)
+- [x] 2.6 RED: same file: block-split invariance (1, 64, 1-sample, irregular); jitter 0 ignores seed; same seed identical, seeds 1/2 differ; jitter=1 mean within 5% over 20 seeds x 60 s; monotonic; clamp extremes D=-5/1e9/NaN, jitter -1/7 (R-GS-2, 4, 5, 7)
+- [x] 2.7 GREEN: `GrainScheduler.{h,cpp}` (double accumulator, `T*(1+j*bipolar())` floored at 1, floor offset, uses ParamLimits)
+- [x] 2.8 RED+GREEN: skip-on-full schedule test: capacity 128 vs unlimited gives identical due-times; freed slot is reused (R-GS-6)
+- [x] 2.9 REFACTOR: shared test helpers in `tests/support/`
 
 ## PR3: Interpolator, grain render, engine
 
