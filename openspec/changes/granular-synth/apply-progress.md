@@ -60,3 +60,30 @@ Modified: Source/core/CMakeLists.txt, tests/CMakeLists.txt, WindowTable.h, tasks
 - SampleBuffer: mismatched right channel size is ignored (mono); empty left gives 0 channels.
 - GrainPool: acquire resets the slot to a default Grain with active=true; lowest-index free slot.
 - Task 2.8 test used a simulation with GrainPool; Grain::pos/length used as start/length bookkeeping in the test only.
+
+## PR3a / Work Unit 3, part 1 (branch feat/granular-synth-03a-render): DONE (tasks 3.1-3.6, 6/9) + 3 PR2 follow-ups
+
+PR3 exceeded the 800-line review budget (~1040 lines) and was split: PR3a (follow-ups, interpolator, renderGrain, EngineParams) and PR3b (GranularEngine, tasks 3.7-3.9).
+
+### PR2 review follow-ups (done first)
+1. Skip-on-full test rewritten (tests/test_scheduler.cpp): scheduler shares its Rng with a callback that always takes one draw; a run with a real 128 GrainPool (acquire/release by end time) is compared with a pool-free run. Asserts equal due-times, maxActive == 128, skipped > 0, accepted > 128, no skip while not full. Sensitivity check inside the test: a callback that skips its draw on a full pool must produce different due-times (so the test would catch a desynchronised stream). No Grain::pos misuse (end times kept in the test).
+2. tests/CMakeLists.txt: FIND_PACKAGE_ARGS removed; pinned SHA fetch is the default; installed Catch2 only via explicit `-DGRAINS_USE_SYSTEM_CATCH2=ON`; offline via FETCHCONTENT_SOURCE_DIR_CATCH2; `catch2_SOURCE_DIR` guarded. Verified: with FETCHCONTENT_TRY_FIND_PACKAGE_MODE=ALWAYS Catch2_DIR is the FetchContent redirect, not a system install; ON with none installed fails configure.
+3. 'tiny interval floors at one sample' now asserts strictly increasing times and min gap >= 1. RED verified: removing the `scaled < 1.0 ? 1.0 : scaled` floor failed it; floor restored.
+
+### TDD evidence
+| Task | RED | GREEN |
+|------|-----|-------|
+| 3.1/3.2 | C1083 grains/Interpolator.h not found | 5/5 |
+| 3.3/3.4 | C2039/C2065 renderGrain not a member of grains | 5/5 (10/10 with interp) |
+| 3.5/3.6 | C1083 grains/EngineParams.h not found | 5/5 |
+
+Fresh incremental build clean under /W4 /WX.
+
+### Files
+New: Source/core/include/grains/{Interpolator,EngineParams}.h, tests/test_{interpolator,grain_render,params}.cpp.
+Modified: Grain.h (renderGrain), tests/CMakeLists.txt, tests/test_scheduler.cpp, tasks.md, apply-progress.md.
+
+### Deviations / decisions
+- renderGrain takes srcL and srcR; srcR == srcL (mono) reads once and feeds both channels, giving bit-identical mono vs dual-mono.
+- Grain pos accumulates `pos += rate`; startOffset field unused.
+- EngineParams::clamped() holds the clamping (3.6); the engine setParams call site lands in PR3b.
