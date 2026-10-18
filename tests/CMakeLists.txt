@@ -33,7 +33,8 @@ add_executable(grains_tests
   test_scheduler.cpp
   test_interpolator.cpp
   test_grain_render.cpp
-  test_params.cpp)
+  test_params.cpp
+  test_engine_bounds.cpp)
 target_include_directories(grains_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(grains_tests PRIVATE grains_core Catch2::Catch2WithMain)
 grains_set_warnings(grains_tests)

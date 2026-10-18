@@ -1,6 +1,7 @@
 add_library(grains_core STATIC
   src/ParamLimits.cpp
   src/GrainScheduler.cpp
+  src/GranularEngine.cpp
   src/SampleBuffer.cpp
   src/WindowTable.cpp)
 target_include_directories(grains_core PUBLIC include)
