@@ -86,9 +86,9 @@ User decisions (2026-10-17), all RESOLVED:
 - [x] 3.4 GREEN: `renderGrain<Interp>` in `Grain.h`
 - [x] 3.5 RED: `tests/test_params.cpp` (EngineParams clamp table incl. NaN, pitch 100 equals 24)
 - [x] 3.6 GREEN: `EngineParams.h`, clamp in `setParams`
-- [ ] 3.7 RED: `tests/test_engine_bounds.cpp`: near-end grain shrinks, no OOB, no step above window slope bound; tiny 1/2-sample source finite; density 0 or null source gives exact 0.0; mono equals dual-mono; spread 0 centres (R-GR-3, 4, 5)
-- [ ] 3.8 GREEN: `GranularEngine.{h,cpp}` (segment loop, spawn bounds, fixed 3 draws before skip, pan, norm gain, flush+ceiling pass)
-- [ ] 3.9 REFACTOR: constants to named values, document ceiling and gain bound
+- [x] 3.7 RED: `tests/test_engine_bounds.cpp`: near-end grain shrinks, no OOB, no step above window slope bound; tiny 1/2-sample source finite; density 0 or null source gives exact 0.0; mono equals dual-mono; spread 0 centres (R-GR-3, 4, 5)
+- [x] 3.8 GREEN: `GranularEngine.{h,cpp}` (segment loop, spawn bounds, fixed 3 draws before skip, pan, norm gain, flush+ceiling pass)
+- [x] 3.9 REFACTOR: constants to named values, document ceiling and gain bound
 
 ## PR4: Hardening and RT safety
 

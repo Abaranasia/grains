@@ -87,3 +87,22 @@ Modified: Grain.h (renderGrain), tests/CMakeLists.txt, tests/test_scheduler.cpp,
 - renderGrain takes srcL and srcR; srcR == srcL (mono) reads once and feeds both channels, giving bit-identical mono vs dual-mono.
 - Grain pos accumulates `pos += rate`; startOffset field unused.
 - EngineParams::clamped() holds the clamping (3.6); the engine setParams call site lands in PR3b.
+
+## PR3b / Work Unit 3, part 2 (branch feat/granular-synth-03b-engine): DONE (tasks 3.7-3.9, 9/9 for WU3)
+
+### TDD evidence
+| Task | RED | GREEN |
+|------|-----|-------|
+| 3.7/3.8 | C1083 grains/GranularEngine.h not found | 7/7 passed FIRST run after the engine existed (no failing run on the implementation); mutation check: replacing the shrink with `len = requested` fails near-end and normalization tests, then reverted |
+| 3.9 | named constants (kOutputCeiling, kFlushThreshold, kMinGrainLength) and bound docs in GranularEngine.h | full 63/63 |
+
+### Files
+New: Source/core/include/grains/GranularEngine.h, Source/core/src/GranularEngine.cpp, tests/test_engine_bounds.cpp.
+Modified: Source/core/CMakeLists.txt, tests/CMakeLists.txt, tasks.md, apply-progress.md.
+
+### Deviations / decisions
+- Segment loop interleaves rendering inside the scheduler callback (no offset buffer): spawns per block are unbounded (up to 1/sample), so a fixed buffer could overflow.
+- Final semitones (pitch + jitter*draw) clamped to +-24 so rate stays bounded.
+- setSource resets the pool; no source / empty source => exact zeros and the scheduler is not advanced.
+- setParams calls EngineParams::clamped() and reconfigures the scheduler.
+- OOB is checked by guarded-buffer interpolator tests and finite/bounded engine output; no sanitizer run.
