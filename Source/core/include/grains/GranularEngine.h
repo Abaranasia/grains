@@ -53,6 +53,9 @@ public:
     // Overwrites L and R with n samples. Zero heap allocation.
     void process(float* left, float* right, int n) noexcept;
 
+    // Read-only introspection (tests): grains currently playing, at most GrainPool::kCapacity.
+    int activeGrainCount() const noexcept { return pool_.activeCount(); }
+
 private:
     void renderSegment(float* left, float* right, int offset, int count) noexcept;
     void spawn() noexcept;
