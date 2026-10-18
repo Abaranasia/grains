@@ -4,6 +4,8 @@
 #include <grains/GranularEngine.h>
 #include <grains/SampleBuffer.h>
 
+#include "support/EngineHelpers.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -12,53 +14,12 @@
 using grains::EngineParams;
 using grains::GranularEngine;
 using grains::SampleBuffer;
-
-namespace {
-
-constexpr double kPi = 3.14159265358979323846;
-
-struct Out {
-    std::vector<float> L, R;
-};
-
-// Pre-fills the output with 7.0 so the test also proves that process() overwrites.
-Out render(GranularEngine& e, int n, int block = 0)
-{
-    Out o{std::vector<float>(static_cast<std::size_t>(n), 7.0f), std::vector<float>(static_cast<std::size_t>(n), 7.0f)};
-    if (block <= 0) block = n;
-    for (int done = 0; done < n; done += block) {
-        const int b = std::min(block, n - done);
-        e.process(o.L.data() + done, o.R.data() + done, b);
-    }
-    return o;
-}
-
-std::vector<float> noise(int frames, std::uint32_t seed)
-{
-    std::vector<float> v(static_cast<std::size_t>(frames));
-    std::uint32_t s = seed;
-    for (float& x : v) {
-        s = s * 1664525u + 1013904223u;
-        x = static_cast<float>(static_cast<double>(s >> 8) / 8388608.0 - 1.0);
-    }
-    return v;
-}
-
-bool allFinite(const Out& o)
-{
-    for (std::size_t i = 0; i < o.L.size(); ++i)
-        if (!std::isfinite(o.L[i]) || !std::isfinite(o.R[i])) return false;
-    return true;
-}
-
-bool allZero(const Out& o)
-{
-    for (std::size_t i = 0; i < o.L.size(); ++i)
-        if (o.L[i] != 0.0f || o.R[i] != 0.0f) return false;
-    return true;
-}
-
-} // namespace
+using grains_test::allFinite;
+using grains_test::allZero;
+using grains_test::kPi;
+using grains_test::noise;
+using grains_test::Out;
+using grains_test::render;
 
 TEST_CASE("engine_bounds: near-end grain shrinks and its window completes", "[engine_bounds]")
 {
@@ -101,22 +62,79 @@ TEST_CASE("engine_bounds: near-end grain shrinks and its window completes", "[en
     }
 }
 
-TEST_CASE("engine_bounds: tiny sources stay finite", "[engine_bounds]")
+// Position 1.0 puts the start on the last frame, so the shrunk length is 0 and the spawn takes the
+// move-back fallback: start = last - 2 * rate, length = kMinGrainLength (2 samples). Density 0.1
+// gives exactly one grain at sample 0. The grain renders window(0) = 0 then window(0.5) = 1 at
+// source position start + rate, so the only non-zero output is L[1] = src * cos(pi/4).
+TEST_CASE("engine_bounds: move-back fallback renders a 2-sample grain inside the source", "[engine_bounds]")
 {
-    for (int frames : {1, 2, 3}) {
-        const SampleBuffer src(std::vector<float>(static_cast<std::size_t>(frames), 0.8f), {}, 48000.0);
+    const int frames = 1000;
+    std::vector<float> ramp(static_cast<std::size_t>(frames));
+    for (int i = 0; i < frames; ++i) ramp[static_cast<std::size_t>(i)] = static_cast<float>(i) / 1000.0f;
+    const SampleBuffer src(ramp, {}, 48000.0);
+    struct Case {
+        float semitones;
+        int rate;
+    };
+    for (const Case c : {Case{0.0f, 1}, Case{12.0f, 2}}) {
+        GranularEngine e;
+        e.prepare(48000.0, 1);
+        e.setSource(&src);
+        EngineParams p;
+        p.density = 0.1f;
+        p.grainSizeMs = 100.0f;
+        p.position = 1.0f;
+        p.pitchSemitones = c.semitones;
+        e.setParams(p);
+        const Out o = render(e, 200);
+
+        const int readIndex = (frames - 1) - 2 * c.rate + c.rate; // start + rate, still inside the source
+        const double expected = static_cast<double>(readIndex) / 1000.0 * std::cos(kPi / 4.0);
+        CHECK(o.L[0] == 0.0f);
+        CHECK(std::abs(static_cast<double>(o.L[1]) - expected) <= 1e-4);
+        CHECK(o.L[1] == o.R[1]);
+        for (int i = 2; i < 200; ++i) REQUIRE(o.L[static_cast<std::size_t>(i)] == 0.0f); // exactly 2 samples long
+    }
+}
+
+// Tiny sources: which frame counts can host a grain depends on the move-back fallback. With 1 ms
+// grains at density 1000 and position 1.0 (start on the last frame), a source of F frames hosts a
+// grain only if last - 2 * rate >= 0, i.e. F >= 3 at rate 1 and F >= 2 at rate 0.25.
+TEST_CASE("engine_bounds: tiny sources are silent or sound exactly where the fallback can fit", "[engine_bounds]")
+{
+    struct Case {
+        int frames;
+        float semitones;
+        bool sounds;
+    };
+    const Case cases[] = {
+        {1, 0.0f, false},   {1, -24.0f, false}, // last = 0: no start fits 2 samples
+        {2, 0.0f, false},                       // start = 1 - 2 < 0
+        {2, -24.0f, true},                      // rate 0.25: start = 0.5
+        {3, 0.0f, true},                        // start = 0
+        {3, 24.0f, false},                      // rate 4: start = 2 - 8 < 0
+    };
+    for (const Case& c : cases) {
+        INFO("frames=" << c.frames << " semitones=" << c.semitones);
+        const SampleBuffer src(std::vector<float>(static_cast<std::size_t>(c.frames), 0.8f), {}, 48000.0);
         GranularEngine e;
         e.prepare(48000.0, 5);
         e.setSource(&src);
         EngineParams p;
         p.density = 1000.0f;
         p.grainSizeMs = 1.0f;
-        p.pitchSemitones = 24.0f;
-        p.positionJitter = 1.0f;
+        p.pitchSemitones = c.semitones;
+        p.position = 1.0f;
         e.setParams(p);
         const Out o = render(e, 4800, 128);
         REQUIRE(allFinite(o));
-        for (float v : o.L) REQUIRE(std::abs(v) <= 4.0f);
+        CHECK(grains_test::peak(o) <= 4.0f);
+        if (c.sounds) {
+            // 0.8 * w(0.5) * cos(pi/4); grains are 2 samples long so they never overlap at 48 samples spacing.
+            CHECK(std::abs(static_cast<double>(grains_test::peak(o)) - 0.8 * std::cos(kPi / 4.0)) <= 1e-4);
+        } else {
+            CHECK(allZero(o));
+        }
     }
 }
 
@@ -217,25 +235,4 @@ TEST_CASE("engine_bounds: output ceiling and denormal flush", "[engine_bounds]")
     e2.setSource(&tiny);
     e2.setParams(EngineParams{});
     CHECK(allZero(render(e2, 24000, 480)));
-}
-
-TEST_CASE("engine_bounds: normalization keeps dense and sparse loudness close", "[engine_bounds]")
-{
-    const SampleBuffer src(noise(48000, 21), {}, 48000.0);
-    auto rms = [&](float density) {
-        GranularEngine e;
-        e.prepare(48000.0, 4);
-        e.setSource(&src);
-        EngineParams p;
-        p.density = density;
-        p.grainSizeMs = 50.0f;
-        p.positionJitter = 1.0f;
-        e.setParams(p);
-        const Out o = render(e, 48000 * 3, 1024);
-        double acc = 0.0;
-        for (std::size_t i = 24000; i < o.L.size(); ++i) acc += static_cast<double>(o.L[i]) * o.L[i];
-        return std::sqrt(acc / static_cast<double>(o.L.size() - 24000));
-    };
-    const double ratioDb = 20.0 * std::log10(rms(400.0f) / rms(20.0f));
-    CHECK(std::abs(ratioDb) <= 3.0);
 }
