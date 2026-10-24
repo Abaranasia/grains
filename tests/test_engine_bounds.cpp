@@ -138,6 +138,40 @@ TEST_CASE("engine_bounds: tiny sources are silent or sound exactly where the fal
     }
 }
 
+// R-GR-7 grain length: round(size * sampleRate) with literal expectations (10 ms). 22.05 kHz is a
+// .5 tie (220.5) and rounds up. A source whose rate differs from the engine rate keeps the length,
+// because the length is counted in output samples. Position 0 and a long source never shrink it.
+TEST_CASE("engine_bounds: grain length follows size and engine sample rate", "[engine_bounds]")
+{
+    struct Case {
+        double engineRate;
+        double sourceRate;
+        int expectedLen;
+    };
+    const Case cases[] = {
+        {22050.0, 22050.0, 221},   {44100.0, 44100.0, 441},   {48000.0, 48000.0, 480},
+        {96000.0, 96000.0, 960},   {192000.0, 192000.0, 1920}, {48000.0, 44100.0, 480},
+    };
+    for (const Case& c : cases) {
+        INFO("engineRate=" << c.engineRate << " sourceRate=" << c.sourceRate);
+        const SampleBuffer src(std::vector<float>(20000, 1.0f), {}, c.sourceRate);
+        GranularEngine e;
+        e.prepare(c.engineRate, 1);
+        e.setSource(&src);
+        EngineParams p;
+        p.density = 0.1f; // one grain at sample 0
+        p.grainSizeMs = 10.0f;
+        p.position = 0.0f;
+        e.setParams(p);
+        const Out o = render(e, 4000);
+
+        int lastNonZero = -1;
+        for (int i = 0; i < 4000; ++i)
+            if (o.L[static_cast<std::size_t>(i)] != 0.0f) lastNonZero = i;
+        CHECK(lastNonZero + 1 == c.expectedLen);
+    }
+}
+
 TEST_CASE("engine_bounds: density 0 and missing source give exact silence", "[engine_bounds]")
 {
     const SampleBuffer src(std::vector<float>(5000, 1.0f), {}, 48000.0);
