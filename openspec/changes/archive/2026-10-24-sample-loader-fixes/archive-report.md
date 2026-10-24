@@ -116,7 +116,7 @@ Filesystem artifacts (post-move paths under `openspec/changes/archive/2026-10-24
 
 ## Risks
 
-1. The folder move is performed by the orchestrator with git (`openspec/changes/sample-loader-fixes/` to `openspec/changes/archive/2026-10-24-sample-loader-fixes/`). The folder contains the untracked `verify-report.md` and this report, so a plain folder move plus `git add` is needed.
+1. The folder was moved with git from `openspec/changes/sample-loader-fixes/` to this archive path in commit 03030c5. The merge in that commit dropped the "Out of scope (explicit)" section of the main sample-source spec; it was restored verbatim in the follow-up docs commit.
 2. The engram review topics (`sdd/sample-loader-fixes/review/*`) are absent. The gate was verified from the orchestrator's native output and the receipts read on disk.
 3. The engram `sdd/sample-loader-fixes/archive-report` topic did not exist before this save, so no earlier blocked record was overwritten.
 4. The candidate tree hashes are copied from the receipts on disk, not recomputed by archive.
