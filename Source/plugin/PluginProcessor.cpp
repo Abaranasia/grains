@@ -62,6 +62,11 @@ void GrainsAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
         return;
     }
     // Mono host: render into the preallocated scratch right channel and discard it.
+    // Unprepared (no scratch yet): output silence instead of looping forever.
+    if (scratchSize_ <= 0 || scratch_ == nullptr) {
+        buffer.clear();
+        return;
+    }
     for (int done = 0; done < numSamples;) {
         const int n = std::min(scratchSize_, numSamples - done);
         engine_.process(left + done, scratch_.get(), n);
