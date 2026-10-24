@@ -10,7 +10,7 @@
 
 | Slice | Commit | Subject | Review lineage |
 |---|---|---|---|
-| build | 931eae6 | build: add pinned JUCE FetchContent fallback and plugin CI job | review-6d051d7c5d07af76 (4R) |
+| build | 931eae6 | build: fetch pinned JUCE when no local checkout and add plugin CI job | review-6d051d7c5d07af76 (4R) |
 | licensing | f8b48be | chore: license under AGPL-3.0-or-later | review-c5af3498af48b663 (4R) |
 | records | 03fe028 | docs(juce-fetch-license): record commit and first CI run | review-a59ce71344c45d63 (review-reliability, risk medium) |
 
