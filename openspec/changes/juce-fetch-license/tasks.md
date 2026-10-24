@@ -61,11 +61,11 @@ Decision needed before apply: No.
 - [x] 2.8 G7 line endings: `git diff --numstat` shows `1 0` per SPDX file (README: more lines from tasks 1.7/2.6 are expected only in README); `git diff --stat` shows no whole-file rewrites. (R-LIC-2)
 - [x] 2.9 G7 build: fresh default (OFF) build with `/WX` as configured by the project, `ctest` 122/122 green; then re-run G1 (fetch configure and `grains_plugin` build) green with SPDX lines present. (R-LIC-2 build scenario)
 - [x] 2.10 Verify `git diff --stat -- Grains.jucer Builds JuceLibraryCode` is empty. (R-LIC-2)
-- [ ] 2.11 Commit (orchestrator): `chore: license under AGPL-3.0-or-later` covering LICENSE, .gitattributes, the 56 SPDX edits and README licensing section.
+- [x] 2.11 Committed as f8b48be (orchestrator): `chore: license under AGPL-3.0-or-later` covering LICENSE, .gitattributes, the 56 SPDX edits and README licensing section.
 
 ## Post-push
 
-- [ ] 3.1 Requires the user's push: when the first CI run is observed, confirm job 3 "Windows MSVC plugin (informational)" ran through the fetch path and `grains_plugin` built (informational; a failure does not block merge), and that jobs 1 and 2 are unaffected. (R-BH-5)
+- [x] 3.1 DONE 2026-10-24, CI run 40119183345 on f8b48be: all three jobs succeeded. Job 3 (job 120946789265) steps: cache step about 1 s (first run, miss), Configure 18:06:44-18:08:37 (includes the JUCE download), Build plugin 18:08:37-18:09:54, post-run cache save. Jobs 1 and 2 succeeded unchanged. The job log needs repo admin rights, so the fetch STATUS line was not quoted; the fetch path is inferred from the cache miss and the configure duration. Original task: requires the user's push: when the first CI run is observed, confirm job 3 "Windows MSVC plugin (informational)" ran through the fetch path and `grains_plugin` built (informational; a failure does not block merge), and that jobs 1 and 2 are unaffected. (R-BH-5)
 
 ## Requirement Traceability
 
