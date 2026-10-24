@@ -285,3 +285,33 @@ TEST_CASE("realtime: acquiring a cleared source and processing allocates and fre
 {
     checkSwapIsRealtimeSafe(true);
 }
+
+// R-SS-11: the gated commit path is allocation-free too. stage() allocates, so it runs before the
+// scope; commit() only swaps a pointer and returns the displaced Box, which is dropped after it.
+TEST_CASE("realtime: committing a staged source and acquiring it allocates and frees nothing", "[realtime][exchange]")
+{
+    grains::SourceExchange<SampleBuffer> x;
+    x.publish(noiseBuffer(31));
+    x.acquire();
+    x.collect();
+    x.publish(noiseBuffer(33)); // unseen pending: commit will displace it
+    auto staged = x.stage(noiseBuffer(35));
+    REQUIRE(static_cast<bool>(staged));
+    grains::SourceExchange<SampleBuffer>::Staged displaced;
+    std::size_t allocs = 99, frees = 99;
+    bool changed = false;
+    {
+        AllocationScope scope;
+        displaced = x.commit(std::move(staged));
+        const auto acquired = x.acquire();
+        changed = acquired.changed;
+        allocs = scope.count();
+        frees = scope.frees();
+    }
+    CHECK(changed);
+    CHECK(allocs == 0);
+    CHECK(frees == 0);
+    CHECK(static_cast<bool>(displaced));
+    displaced = grains::SourceExchange<SampleBuffer>::Staged{};
+    x.collect();
+}
