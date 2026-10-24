@@ -22,7 +22,7 @@ void SampleLoader::request(const juce::String& path, Origin origin)
 {
     {
         const juce::ScopedLock sl(lock_);
-        pending_ = Request{path, origin, ++gen_};
+        pending_ = Request{path, origin, gate_.next()}; // lock_ then gate mutex, never the reverse
     }
     notify();
 }
@@ -58,14 +58,26 @@ void SampleLoader::post(const Request& r, bool loaded, const juce::String& text)
     });
 }
 
+bool SampleLoader::commitGated(const Request& r, grains::SourceExchange<grains::SampleBuffer>::Staged s)
+{
+    grains::SourceExchange<grains::SampleBuffer>::Staged displaced;
+    const bool accepted = gate_.commitIf(r.generation, [&]() noexcept { displaced = exchange_.commit(std::move(s)); });
+    // displaced and any rejected s are destroyed here, after the gate unlocked
+    if (accepted) exchange_.collect();
+    return accepted;
+}
+
 void SampleLoader::load(const Request& r)
 {
-    const auto isCurrent = [&] { return !threadShouldExit() && gen_.load() == r.generation; };
+    const auto isCurrent = [&] { return !threadShouldExit() && gate_.current() == r.generation; };
 
     if (r.path.isEmpty() && r.origin == Origin::Restore) {
-        exchange_.publish(nullptr);
-        exchange_.collect();
-        post(r, false, "No sample");
+        auto clear = exchange_.stageClear();
+        if (!clear) { // Box allocation failed: keep the previous source
+            if (isCurrent()) post(r, false, "Error: No sample");
+            return;
+        }
+        if (commitGated(r, std::move(clear))) post(r, false, "No sample");
         return;
     }
 
@@ -77,9 +89,12 @@ void SampleLoader::load(const Request& r)
     const auto fail = [&] {
         if (!isCurrent()) return;
         if (r.origin == Origin::Restore) {
-            exchange_.publish(nullptr);
-            exchange_.collect();
-            post(r, false, "Missing: " + name);
+            auto clear = exchange_.stageClear();
+            if (!clear) { // Box allocation failed: keep the previous source
+                post(r, false, "Error: " + name);
+                return;
+            }
+            if (commitGated(r, std::move(clear))) post(r, false, "Missing: " + name);
         } else {
             post(r, false, "Error: " + name);
         }
@@ -121,10 +136,11 @@ void SampleLoader::load(const Request& r)
     if (built.error != grains::BuildError::None) return fail();
     if (!isCurrent()) return;
 
-    if (!exchange_.publish(std::move(built.buffer))) { // Box allocation failed: keep the previous source
+    auto staged = exchange_.stage(std::move(built.buffer));
+    if (!staged) { // Box allocation failed: keep the previous source
         post(r, false, "Error: " + name);
         return;
     }
-    exchange_.collect();
+    if (!commitGated(r, std::move(staged))) return; // superseded: the Box is freed here, not published
     post(r, true, "Loaded: " + name + (truncated ? " (truncated to 5 min)" : ""));
 }
