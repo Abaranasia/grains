@@ -8,6 +8,22 @@ Local verification: Windows MSVC build + ctest. CI (Linux clang ASan/UBSan, work
 Local verification command (all test tasks):
 `cmake --build <build-dir> --config Debug` then `ctest --test-dir <build-dir> -C Debug --output-on-failure`
 
+## Checklist
+
+Machine-readable summary of the task headings below (same status).
+
+- [x] T1 Grain length table
+- [x] T2 Engine pitch clamp via setParams
+- [x] T3 Spawn-side clamp test
+- [x] T4 Window range sweep
+- [x] T5 Realtime extremes asserts
+- [x] T6 1 s worst-case extremes subset + grid comment
+- [x] T7 Commit 1 gate
+- [x] T8 GRAINS_SANITIZE option
+- [x] T9 Clang -Werror fix budget and float-cast-overflow cap
+- [x] T10 CI workflow
+- [x] T11 Commit 2 gate
+
 ## Commit 1: test(engine)
 
 ### [x] T1 (a) Grain length table, R-GR-7
