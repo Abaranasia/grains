@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <grains/EngineParams.h>
+#include <grains/GenerationGate.h>
 #include <grains/GranularEngine.h>
 #include <grains/SampleBuffer.h>
 #include <grains/SourceExchange.h>
@@ -212,6 +213,132 @@ TEST_CASE("exchange: stress with a producer and a consumer thread", "[exchange][
     CHECK(lastSeen == kLast);
     CHECK(Tracked::live == 0);
     CHECK(Tracked::consumerFrees == 0);
+}
+
+// R-SS-11: stage/commit split. stage() allocates; commit() only swaps the pointer and hands back
+// the displaced unseen Box so the caller frees it outside any lock.
+TEST_CASE("exchange: stage then commit delivers the value once", "[exchange][stage]")
+{
+    Tracked::reset();
+    {
+        Exchange x;
+        auto s = x.stage(make(1));
+        REQUIRE(static_cast<bool>(s));
+        auto displaced = x.commit(std::move(s));
+        CHECK_FALSE(static_cast<bool>(displaced));
+        x.collect();
+        const auto a = x.acquire();
+        REQUIRE(a.source != nullptr);
+        CHECK(a.changed);
+        CHECK(a.source->id == 1);
+        CHECK_FALSE(x.acquire().changed);
+    }
+    CHECK(Tracked::live == 0);
+}
+
+TEST_CASE("exchange: commit returns the displaced unseen source instead of freeing it", "[exchange][stage]")
+{
+    Tracked::reset();
+    grains::GenerationGate gate;
+    {
+        Exchange x;
+        REQUIRE(x.publish(make(1))); // unseen pending
+        const auto gen = gate.next();
+        auto staged = x.stage(make(2));
+        Exchange::Staged displaced;
+        int destroyedInside = -1;
+        const bool ok = gate.commitIf(gen, [&]() noexcept {
+            displaced = x.commit(std::move(staged));
+            destroyedInside = Tracked::destroyed.load();
+        });
+        CHECK(ok);
+        CHECK(destroyedInside == 0);
+        CHECK(Tracked::live == 2);
+        CHECK(static_cast<bool>(displaced));
+        displaced = Exchange::Staged{};
+        CHECK(Tracked::destroyed == 1);
+        CHECK(Tracked::live == 1);
+
+        // An empty Staged is a no-op: the pending source stays in place.
+        const auto none = x.commit(Exchange::Staged{});
+        CHECK_FALSE(static_cast<bool>(none));
+        const auto r = x.acquire();
+        REQUIRE(r.source != nullptr);
+        CHECK(r.source->id == 2);
+    }
+    CHECK(Tracked::live == 0);
+}
+
+TEST_CASE("exchange: a gated stageClear clears the source without an empty buffer", "[exchange][stage]")
+{
+    Tracked::reset();
+    {
+        Exchange x;
+        x.publish(make(1));
+        x.acquire();
+        grains::GenerationGate gate;
+        const auto gen = gate.next();
+        auto s = x.stageClear();
+        REQUIRE(static_cast<bool>(s));
+        Exchange::Staged displaced;
+        REQUIRE(gate.commitIf(gen, [&]() noexcept { displaced = x.commit(std::move(s)); }));
+        x.collect();
+        const auto r = x.acquire();
+        CHECK(r.changed);
+        CHECK(r.source == nullptr);
+        x.collect();
+        CHECK(Tracked::live == 0);
+    }
+    CHECK(Tracked::live == 0);
+}
+
+TEST_CASE("exchange: a superseded staged source is rejected and the exchange is unchanged", "[exchange][stage]")
+{
+    Tracked::reset();
+    {
+        Exchange x;
+        grains::GenerationGate gate;
+        x.publish(make(1));
+        const auto a = x.acquire();
+        REQUIRE(a.source != nullptr);
+        const auto old = gate.next();
+        auto staged = x.stage(make(2));
+        gate.next(); // a newer request supersedes
+        Exchange::Staged displaced;
+        const bool ok = gate.commitIf(old, [&]() noexcept { displaced = x.commit(std::move(staged)); });
+        CHECK_FALSE(ok);
+        const auto b = x.acquire();
+        CHECK_FALSE(b.changed);
+        CHECK(b.source == a.source);
+        CHECK(Tracked::live == 2); // the rejected Box is still held by the caller
+        CHECK(static_cast<bool>(staged));
+        staged = Exchange::Staged{};
+        CHECK(Tracked::destroyed == 1);
+        CHECK(Tracked::live == 1);
+    }
+    CHECK(Tracked::live == 0);
+    CHECK(Tracked::destroyed == 2);
+}
+
+TEST_CASE("exchange: a superseded staged clear is rejected and the source is kept", "[exchange][stage]")
+{
+    Tracked::reset();
+    {
+        Exchange x;
+        grains::GenerationGate gate;
+        x.publish(make(1));
+        const auto a = x.acquire();
+        const auto old = gate.next();
+        auto staged = x.stageClear();
+        gate.next();
+        Exchange::Staged displaced;
+        CHECK_FALSE(gate.commitIf(old, [&]() noexcept { displaced = x.commit(std::move(staged)); }));
+        const auto b = x.acquire();
+        CHECK_FALSE(b.changed);
+        CHECK(b.source == a.source);
+        CHECK(Tracked::live == 1);
+    }
+    CHECK(Tracked::live == 0);
 }
 
 TEST_CASE("exchange: swapping the engine source drops active grains and a clear silences it", "[exchange][engine]")
