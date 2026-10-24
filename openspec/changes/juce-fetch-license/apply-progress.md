@@ -23,3 +23,14 @@
 ## Notes
 - Job id for the new job: `windows-msvc-plugin`, name "Windows MSVC plugin (informational)".
 - CMakeLists.txt, README.md, Source/plugin/CMakeLists.txt keep CRLF; ci.yml is LF.
+
+## Commit 2 (Group 2: tasks 2.1-2.10)
+- 2.1 W7 gate PASSED. JUCE 9.0.0 (f8f8864) LICENSE.md: "The JUCE Framework modules are dual-licensed under the [AGPLv3](https://www.gnu.org/licenses/agpl-3.0.en.html) and the commercial [JUCE licence]". VST3 SDK: `- [VST3](modules/juce_audio_processors_headless/format_types/VST3_SDK/) ([MIT](.../LICENSE.txt))`; its LICENSE.txt is "MIT License, Copyright (c) 2025, Steinberg Media Technologies GmbH" (compatible).
+- 2.2 LICENSE downloaded with curl -L: SHA256 0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0, 661 lines. Second fresh download hash matches (see 2.4).
+- 2.3 .gitattributes: `LICENSE -text`.
+- 2.4 Not staged by executor (hard rule). Equivalent: second download hash equals recorded digest; `git check-attr text LICENSE` = unset. Orchestrator should confirm `git show :LICENSE | sha256sum` after staging.
+- 2.5 SPDX line 1 added to 56 files (33 CRLF, 23 LF preserved, no BOMs) via script in scratchpad. numstat: all 56 files `1 0` except README `7 0` (SPDX + 6-line license section).
+- 2.6 README License section added (CRLF).
+- 2.7 56 files with exactly 1 match each; no match outside set except openspec docs text.
+- 2.9 Default OFF build (-Werror=dev -Werror=deprecated, /WX): ctest 122/122, no warnings. G1 fetch build build/plugin-jf2: grains_plugin (VST3 + Standalone) Debug OK.
+- 2.10 git diff --stat for Grains.jucer Builds JuceLibraryCode .github openspec/specs: empty.

@@ -47,20 +47,20 @@ Decision needed before apply: No.
 - [x] 1.14 G8: fresh dir, empty `GRAINS_JUCE_DIR`, `-DFETCHCONTENT_FULLY_DISCONNECTED=ON`; expect the "fetched JUCE not available" guard FATAL_ERROR. (R-BH-3)
 - [x] 1.15 Verify untouched paths: `git diff --stat -- Grains.jucer Builds JuceLibraryCode` is empty. (R-BH-3 Projucer scenario)
 - [x] 1.16 Verify the CI file by inspection: three jobs, every `uses:` pinned to a 40-char SHA, `permissions: contents: read`, concurrency cancel group intact, jobs 1 and 2 keep `GRAINS_BUILD_PLUGIN` OFF. (R-BH-5)
-- [ ] 1.17 Commit (orchestrator): `build: add pinned JUCE FetchContent fallback and plugin CI job` covering CMakeLists.txt, Source/plugin/CMakeLists.txt, ci.yml, README, and `openspec/changes/juce-fetch-license/`.
+- [x] 1.17 Commit (orchestrator): `build: add pinned JUCE FetchContent fallback and plugin CI job` covering CMakeLists.txt, Source/plugin/CMakeLists.txt, ci.yml, README, and `openspec/changes/juce-fetch-license/`. Committed as 931eae6.
 
 ## Commit 2: `chore: license under AGPL-3.0-or-later`
 
-- [ ] 2.1 W7 STOP gate (before any licensing work): from the extracted JUCE 9.0.0 tarball (task 1.2), read `LICENSE.md` and confirm it still offers AGPLv3; also inspect the license of the bundled VST3 SDK. If AGPLv3 is no longer offered or the VST3 SDK license is incompatible, STOP and report to the orchestrator without touching any licensing file. Record the findings in apply-progress. (R-LIC-3)
-- [ ] 2.2 Download `https://www.gnu.org/licenses/agpl-3.0.txt` straight to `LICENSE` at the repo root with `curl -o` or `Invoke-WebRequest -OutFile` (never via an editor). Compute SHA256 and record it in apply-progress. (R-LIC-1)
-- [ ] 2.3 Create `.gitattributes` with the single line `LICENSE -text`. (R-LIC-1)
-- [ ] 2.4 Verify R-LIC-1: after staging, `git show :LICENSE` hashed with SHA256 equals the recorded digest, and equals a second fresh download hashed in a new scratch dir. (R-LIC-1)
-- [ ] 2.5 Add the SPDX line as line 1 of the 56 first-party files, preserving each file's existing line endings (detect CRLF vs LF per file; do not normalize): `// SPDX-License-Identifier: AGPL-3.0-or-later` for C++ files under `Source/` and `tests/` (including `tests/support/`), `# SPDX-License-Identifier: AGPL-3.0-or-later` for CMake files (`cmake/`, `tests/CMakeLists.txt`, `Source/**/CMakeLists.txt`, root `CMakeLists.txt`), and `<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->` for `README.md`. Exclude `LICENSE`, `.gitattributes`, `ci.yml`, `Builds/`, `JuceLibraryCode/`, `Grains.jucer`, `openspec/`. (R-LIC-2)
-- [ ] 2.6 Add the README licensing section: AGPL-3.0-or-later, link to `LICENSE`, "JUCE is dual-licensed (AGPLv3 / commercial); Grains uses JUCE under its AGPLv3 option; distributed plugin binaries are therefore under AGPLv3." Confirm the sourcing text from task 1.7 is present. (R-LIC-3)
-- [ ] 2.7 G7 count: `rg -c "SPDX-License-Identifier: AGPL-3.0-or-later"` over the 56 files shows exactly 1 per file and exactly 56 files; `rg -l` over the exclusion list returns nothing. (R-LIC-2)
-- [ ] 2.8 G7 line endings: `git diff --numstat` shows `1 0` per SPDX file (README: more lines from tasks 1.7/2.6 are expected only in README); `git diff --stat` shows no whole-file rewrites. (R-LIC-2)
-- [ ] 2.9 G7 build: fresh default (OFF) build with `/WX` as configured by the project, `ctest` 122/122 green; then re-run G1 (fetch configure and `grains_plugin` build) green with SPDX lines present. (R-LIC-2 build scenario)
-- [ ] 2.10 Verify `git diff --stat -- Grains.jucer Builds JuceLibraryCode` is empty. (R-LIC-2)
+- [x] 2.1 W7 STOP gate (before any licensing work): from the extracted JUCE 9.0.0 tarball (task 1.2), read `LICENSE.md` and confirm it still offers AGPLv3; also inspect the license of the bundled VST3 SDK. If AGPLv3 is no longer offered or the VST3 SDK license is incompatible, STOP and report to the orchestrator without touching any licensing file. Record the findings in apply-progress. (R-LIC-3)
+- [x] 2.2 Download `https://www.gnu.org/licenses/agpl-3.0.txt` straight to `LICENSE` at the repo root with `curl -o` or `Invoke-WebRequest -OutFile` (never via an editor). Compute SHA256 and record it in apply-progress. (R-LIC-1)
+- [x] 2.3 Create `.gitattributes` with the single line `LICENSE -text`. (R-LIC-1)
+- [x] 2.4 Verify R-LIC-1: after staging, `git show :LICENSE` hashed with SHA256 equals the recorded digest, and equals a second fresh download hashed in a new scratch dir. (R-LIC-1)
+- [x] 2.5 Add the SPDX line as line 1 of the 56 first-party files, preserving each file's existing line endings (detect CRLF vs LF per file; do not normalize): `// SPDX-License-Identifier: AGPL-3.0-or-later` for C++ files under `Source/` and `tests/` (including `tests/support/`), `# SPDX-License-Identifier: AGPL-3.0-or-later` for CMake files (`cmake/`, `tests/CMakeLists.txt`, `Source/**/CMakeLists.txt`, root `CMakeLists.txt`), and `<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->` for `README.md`. Exclude `LICENSE`, `.gitattributes`, `ci.yml`, `Builds/`, `JuceLibraryCode/`, `Grains.jucer`, `openspec/`. (R-LIC-2)
+- [x] 2.6 Add the README licensing section: AGPL-3.0-or-later, link to `LICENSE`, "JUCE is dual-licensed (AGPLv3 / commercial); Grains uses JUCE under its AGPLv3 option; distributed plugin binaries are therefore under AGPLv3." Confirm the sourcing text from task 1.7 is present. (R-LIC-3)
+- [x] 2.7 G7 count: `rg -c "SPDX-License-Identifier: AGPL-3.0-or-later"` over the 56 files shows exactly 1 per file and exactly 56 files; `rg -l` over the exclusion list returns nothing. (R-LIC-2)
+- [x] 2.8 G7 line endings: `git diff --numstat` shows `1 0` per SPDX file (README: more lines from tasks 1.7/2.6 are expected only in README); `git diff --stat` shows no whole-file rewrites. (R-LIC-2)
+- [x] 2.9 G7 build: fresh default (OFF) build with `/WX` as configured by the project, `ctest` 122/122 green; then re-run G1 (fetch configure and `grains_plugin` build) green with SPDX lines present. (R-LIC-2 build scenario)
+- [x] 2.10 Verify `git diff --stat -- Grains.jucer Builds JuceLibraryCode` is empty. (R-LIC-2)
 - [ ] 2.11 Commit (orchestrator): `chore: license under AGPL-3.0-or-later` covering LICENSE, .gitattributes, the 56 SPDX edits and README licensing section.
 
 ## Post-push

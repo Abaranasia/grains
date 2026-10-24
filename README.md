@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 # Grains
 
 Granular synth engine (`grains_core`, JUCE-free) plus an opt-in JUCE plugin shell.
@@ -31,3 +32,9 @@ it through the fetch path below. Use a separate build directory:
   can reach +12 dBFS), so start with a low monitoring level.
 - Sessions store the sample's absolute path, not the audio. If the file moves, the plugin stays
   silent and shows "Missing: <name>".
+
+## License
+
+Grains is licensed under AGPL-3.0-or-later; see [LICENSE](LICENSE).
+
+JUCE is dual-licensed (AGPLv3 / commercial). Grains uses JUCE under its AGPLv3 option, so distributed plugin binaries are therefore under AGPLv3.

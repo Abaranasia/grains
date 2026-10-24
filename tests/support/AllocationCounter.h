@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 #pragma once
 
 // Heap-allocation counter for real-time safety tests (R-GR-8).

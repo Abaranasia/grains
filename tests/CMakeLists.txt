@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Catch2 is fetched at a pinned commit by default so every build uses the same bytes. An
 # installed Catch2 is never picked up implicitly (no FIND_PACKAGE_ARGS). Offline options:
 #   -DFETCHCONTENT_SOURCE_DIR_CATCH2=<path>   use a local checkout (honoured by FetchContent)
