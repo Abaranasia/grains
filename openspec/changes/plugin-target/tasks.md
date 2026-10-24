@@ -124,7 +124,7 @@ Parallelism: 2.1 and 2.2 can be written in parallel (different files) but must b
 
 ### 2.6 Manual verification (human required)
 
-- [ ] MANUAL — pending user (all items below; not run by the apply agent)
+- [x] MANUAL - done 2026-10-24 by user in the Standalone (items 1, 2, 3 state part, 4). VST3-in-DAW checks (item 3 host automation, item 5 MIDI) waived by user; deferred as a follow-up.
 
 1. Launch the Standalone exe from `build-plugin` output: window opens, the generic editor shows exactly 9 parameters with expected names (R-PS-5, R-PM-1).
 2. Audio output is silent with all defaults and while moving every control (R-PS-1).
