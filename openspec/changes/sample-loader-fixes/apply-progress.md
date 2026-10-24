@@ -1,6 +1,6 @@
 # Apply progress: sample-loader-fixes
 
-Status: all implementation tasks done. Pending: 1.14 and 2.4 commit sub-steps (orchestrator), 2.5 manual (user). 3.1: no docs commit.
+Status: all tasks done. Core committed as b4559e0 (1.14), plugin as 4143e53 (2.4). Manual 2.5: all 5 Standalone checks confirmed by the user on 2026-10-24. 3.1: no docs commit.
 
 ## TDD evidence
 | Task | RED failure mode |
