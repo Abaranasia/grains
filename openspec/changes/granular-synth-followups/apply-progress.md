@@ -2,7 +2,7 @@
 
 Mode: Strict TDD (characterization tests; RED shown by temporary sabotage, reverted, `git diff -- Source` empty at the end).
 Delivery: single PR, two planned commits (`test:` T1-T7, `ci:` T8-T11). Nothing committed, staged or pushed by apply.
-Status: 10/11 tasks complete. T9 pending (needs the first CI run).
+Status: 11/11 tasks complete. T9 closed 2026-10-24 with no source change: first CI run on c2dfc74 green on both jobs (Windows MSVC; Linux clang ASan + UBSan + float-cast-overflow, `-fno-sanitize-recover=all`).
 
 Baseline before changes: 78/78 (MSVC Debug). Final: 84/84 Debug, 84/84 Release.
 

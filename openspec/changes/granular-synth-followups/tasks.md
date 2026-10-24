@@ -65,8 +65,9 @@ Local verification command (all test tasks):
 - GREEN: MSVC + ON fails with a clear message; MSVC + default (OFF) configures and builds unchanged; full ctest still passes.
 - Verify locally: both configure invocations. The clang flags path cannot be run on Windows MSVC; it is verified in CI.
 
-### [ ] T9 Clang -Werror fix budget and float-cast-overflow cap (CI-dependent)
-- PENDING: not done at apply time, only actionable after the first CI run. Budget: 0-20 lines of source change for clang `-Werror` warnings (fix, do not suppress broadly).
+### [x] T9 Clang -Werror fix budget and float-cast-overflow cap (CI-dependent)
+- DONE 2026-10-24 with no source change: the first CI run on c2dfc74 passed both jobs (Windows MSVC; Linux clang ASan + UBSan with float-cast-overflow and `-fno-sanitize-recover=all`). Zero clang `-Werror` fixes needed, no UBSan report, flag set kept as designed.
+- Original plan (kept for reference): not done at apply time, only actionable after the first CI run. Budget: 0-20 lines of source change for clang `-Werror` warnings (fix, do not suppress broadly).
 - float-cast-overflow: if UBSan reports a real overflow, fix in the engine only if the fix is <= 30 lines; the fix goes with a regression assertion in the T6/T3 tests.
 - Drop-flag path: if the fix exceeds 30 lines, drop `float-cast-overflow` from the `GRAINS_SANITIZE` flags (keep address,undefined), record the finding as a follow-up, and:
   - update the R-BH-5 delta spec and design flag list to match;
