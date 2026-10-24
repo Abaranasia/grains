@@ -1,5 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Silent VST3 + Standalone shell around grains_core. Metadata below is placeholder until the final
-# plugin identity is decided. JUCE comes from the root CMakeLists (GRAINS_JUCE_DIR).
+# plugin identity is decided. JUCE comes from the root CMakeLists (local GRAINS_JUCE_DIR or pinned fetch).
 juce_add_plugin(GrainsPlugin
   COMPANY_NAME "Grains"
   PLUGIN_MANUFACTURER_CODE Grns

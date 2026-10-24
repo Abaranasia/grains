@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 # Grains
 
 Granular synth engine (`grains_core`, JUCE-free) plus an opt-in JUCE plugin shell.
@@ -10,15 +11,19 @@ Granular synth engine (`grains_core`, JUCE-free) plus an opt-in JUCE plugin shel
 
 ## Plugin (VST3 + Standalone, opt-in)
 
-The plugin is OFF by default and CI keeps it OFF. It needs a local JUCE checkout. Use a separate
-build directory:
+The plugin is OFF by default; the two core CI jobs keep it OFF, and an informational CI job builds
+it through the fetch path below. Use a separate build directory:
 
     cmake -S . -B build-plugin -DGRAINS_BUILD_PLUGIN=ON -DGRAINS_JUCE_DIR=<path-to-JUCE>
     cmake --build build-plugin --config Debug --target GrainsPlugin_VST3
     cmake --build build-plugin --config Debug --target GrainsPlugin_Standalone
 
-- `GRAINS_JUCE_DIR` defaults to `../../Projucer` relative to the repository root. Configuration
-  fails with a clear error if it has no `CMakeLists.txt`.
+- JUCE sourcing order: (1) a local checkout at `GRAINS_JUCE_DIR` (default `../../Projucer`
+  relative to the repository root) when it has a `CMakeLists.txt`; (2) otherwise a pinned JUCE 9.0.0
+  tarball is downloaded with FetchContent and verified by SHA256. Set `-DGRAINS_JUCE_FETCH=OFF` to
+  disable the download (configuration then fails with a clear error if no local JUCE is found),
+  e.g. for offline builds.
+- `FETCHCONTENT_SOURCE_DIR_JUCE` bypasses the hash check; prefer `GRAINS_JUCE_DIR` for a local copy.
 - The plugin targets are excluded from `all`; build them by target name (or `grains_plugin` for both).
 - `GRAINS_SANITIZE=ON` together with the plugin is unsupported.
 - The plugin granulates a loaded sample: use the Load button or drop a `.wav`/`.aiff`/`.aif` file
@@ -27,3 +32,9 @@ build directory:
   can reach +12 dBFS), so start with a low monitoring level.
 - Sessions store the sample's absolute path, not the audio. If the file moves, the plugin stays
   silent and shows "Missing: <name>".
+
+## License
+
+Grains is licensed under AGPL-3.0-or-later; see [LICENSE](LICENSE).
+
+JUCE is dual-licensed (AGPLv3 / commercial). Grains uses JUCE under its AGPLv3 option, so distributed plugin binaries are therefore under AGPLv3.
