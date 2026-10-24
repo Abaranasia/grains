@@ -4,7 +4,7 @@
 
 An opt-in JUCE plugin (VST3 + Standalone) that hosts `grains_core` with 9 automatable parameters, a sample loader, and an editor embedding the generic parameter editor. Output is silent until a sample is loaded; once loaded the engine renders continuously. JUCE glue is thin; behaviour is verified manually. Any logic that can be tested offline lives in `parameter-mapping` and `sample-source`.
 
-Test-layer legend: **[Manual]** = manual verification in verify phase (no automated coverage; JUCE glue). **[Catch2]** = automated.
+Test-layer legend: **[Manual]** = manual verification (no automated coverage; JUCE glue). **[Catch2]** = automated.
 
 ## Requirements
 
@@ -22,7 +22,7 @@ When `GRAINS_BUILD_PLUGIN=ON` and JUCE is available, the build MUST define a plu
 - Then no JUCE or plugin target appears
 
 ### R-PS-2 Placeholder metadata
-Plugin metadata MUST use placeholders pending user confirmation: company name "Grains", plugin name "Grains", a 4-character manufacturer code, and a 4-character plugin code (manufacturer code with at least one uppercase letter per JUCE convention). The plugin MUST be an instrument that accepts MIDI input and ignores it in this change (no note, gate, or pitch handling); MIDI handling is a later change. Final identity (company, codes, bundle ID) is explicitly deferred.
+Plugin metadata MUST use placeholders pending user confirmation: company name "Grains", plugin name "Grains", a 4-character manufacturer code, and a 4-character plugin code (manufacturer code with at least one uppercase letter per JUCE convention). The plugin MUST be an instrument that accepts MIDI input and ignores it (no note, gate, or pitch handling); MIDI handling is a later change. Final identity (company, codes, bundle ID) is explicitly deferred.
 
 #### Scenario: Metadata present [Manual]
 - Given a built plugin
