@@ -1,6 +1,6 @@
 # Apply progress: plugin-target
 
-Status: all automated tasks done (14 of 14 task groups; 2.6 manual checks pending user).
+Status: all automated tasks done (14 of 14 task groups; 2.6 Standalone checks confirmed by user, VST3-in-DAW checks waived).
 
 ## Group 1 (core, strict TDD)
 
@@ -23,11 +23,11 @@ Status: all automated tasks done (14 of 14 task groups; 2.6 manual checks pendin
 - 2.5: (1) OFF regression 95/95, no C language or JUCE in the OFF cache. (2) bad-dir error path OK, temp dir removed.
   (3) ON configure OK. (4) `GrainsPlugin_VST3` and `GrainsPlugin_Standalone` build Debug, no warnings from first-party code;
   default `--build` of the ON tree does not build them. (5) `build-plugin*/` added to `.gitignore`.
-- 2.6: MANUAL — partial. 2026-10-24: user confirmed the Standalone (Debug) smoke test passes: window opens,
-  silent, audio settings usable, clean close. User also confirmed in the Standalone: exactly 9 parameters with the
-  expected names (item 1), silence while moving controls (item 2), values restored after close/reopen (item 3,
-  state part), mono output with no crash and silence (item 4). Still pending: VST3-in-host automation (item 3,
-  host part) and MIDI-ignored check (item 5, optional).
+- 2.6: MANUAL — Standalone items 1-4 confirmed by user 2026-10-24: window opens and closes cleanly; exactly 9
+  parameters with the expected names (item 1); silence with defaults and while moving controls (item 2); values
+  restored after close/reopen (item 3, state part); mono output with no crash and silence (item 4). VST3-in-DAW
+  checks (item 3 host automation, item 5 MIDI ignored) were WAIVED by the user and deferred as a follow-up
+  (see archive-report.md, follow-up a).
 
 ## Deviations from design
 
