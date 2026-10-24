@@ -38,7 +38,8 @@ add_executable(grains_tests
   test_engine_determinism.cpp
   test_engine_extremes.cpp
   test_engine_loudness.cpp
-  test_engine_pool_full.cpp)
+  test_engine_pool_full.cpp
+  test_param_spec.cpp)
 target_include_directories(grains_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(grains_tests PRIVATE grains_core Catch2::Catch2WithMain)
 grains_set_warnings(grains_tests)
