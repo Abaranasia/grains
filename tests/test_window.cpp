@@ -47,3 +47,29 @@ TEST_CASE("window: out-of-range phase is clamped", "[window]")
     CHECK(w.at(-0.5f) == 0.0f);
     CHECK(w.at(1.5f) == 0.0f);
 }
+
+// R-GR-1 range sweep: every table-entry boundary phase (frac == 0, including the last interval
+// edge), a dense sweep between them and the largest float below 1 must stay finite and in [0, 1].
+TEST_CASE("window: values stay finite and within [0, 1] over boundary and dense phases", "[window]")
+{
+    const grains::WindowTable w;
+    auto inRange = [](float v) { return std::isfinite(v) && v >= 0.0f && v <= 1.0f; };
+
+    int checked = 0;
+    int inside = 0;
+    float maxValue = 0.0f;
+    auto visit = [&](float phase) {
+        const float v = w.at(phase);
+        ++checked;
+        if (inRange(v)) ++inside;
+        if (v > maxValue) maxValue = v;
+    };
+    for (int k = 0; k < grains::WindowTable::kSize; ++k)
+        visit(static_cast<float>(k) / static_cast<float>(grains::WindowTable::kSize - 1));
+    for (int i = 0; i <= 100000; ++i) visit(static_cast<float>(i) / 100000.0f);
+    visit(std::nextafter(1.0f, 0.0f));
+
+    CHECK(checked == grains::WindowTable::kSize + 100001 + 1);
+    CHECK(inside == checked); // every sampled value is finite and in [0, 1]
+    CHECK(maxValue > 0.99f);  // the sweep really reaches the window peak
+}

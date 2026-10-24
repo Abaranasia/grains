@@ -36,8 +36,10 @@ bool noSubnormals(const Out& o)
 } // namespace
 
 // R-GR-7 grid (rendered for 0.25 s per combination instead of 1 s to keep the Debug run short; the
-// worst case, a saturated pool, is reached after about 0.13 s). Size 1 sample at 48 kHz is 1000/48000 ms. The fixed extras (jitters at their
-// maximum, gain 2) push every combination as hard as the ranges allow.
+// worst case, a saturated pool, is reached after about 0.13 s). Size 1 sample at 48 kHz is
+// 1000/48000 ms. The fixed extras (jitters at their maximum, gain 2) push every combination as hard
+// as the ranges allow. The 1 s worst-case subset below covers what 0.25 s cannot: release and
+// reacquire at a saturated pool only start after about 1 s.
 TEST_CASE("engine_extremes: parameter grid stays finite and within the ceiling", "[engine_extremes]")
 {
     // Mostly DC (0.9) plus a little noise: coherent grains make the output ceiling matter in the grid.
@@ -83,6 +85,123 @@ TEST_CASE("engine_extremes: parameter grid stays finite and within the ceiling",
                 }
     CHECK(combos == 300);
     CHECK(sounding > 150); // most combinations really render grains, so the bounds are meaningful
+}
+
+// The engine clamps the pitch parameter in setParams (EngineParams::clamped), so +-100 st must
+// render exactly like +-24 st. 24 vs 23 is the control: a pitch that is not clamped does differ.
+TEST_CASE("engine_extremes: pitch beyond +-24 st renders bit-identical to +-24", "[engine_extremes]")
+{
+    const SampleBuffer src(noise(30000, 21), {}, 48000.0);
+    auto run = [&](float pitch) {
+        GranularEngine e;
+        e.prepare(48000.0, 5);
+        e.setSource(&src);
+        EngineParams p;
+        p.density = 100.0f;
+        p.grainSizeMs = 40.0f;
+        p.positionJitter = 0.5f;
+        p.panSpread = 1.0f;
+        p.pitchSemitones = pitch;
+        e.setParams(p);
+        return render(e, 12000, 500);
+    };
+
+    const Out up = run(24.0f);
+    const Out down = run(-24.0f);
+    REQUIRE_FALSE(allZero(up));
+    REQUIRE_FALSE(allZero(down));
+    const Out upHigh = run(100.0f);
+    const Out downHigh = run(-100.0f);
+    CHECK(upHigh.L == up.L);
+    CHECK(upHigh.R == up.R);
+    CHECK(downHigh.L == down.L);
+    CHECK(downHigh.R == down.R);
+
+    CHECK_FALSE(run(23.0f).L == up.L);
+    CHECK_FALSE(run(-23.0f).L == down.L);
+}
+
+// setParams already clamps +-100 to +-24, so only pitch + pitch jitter can reach the clamp inside
+// spawn(). A constant-1 source of 8001 frames and position 0 turns the clamped rate into a
+// directly visible grain length: the grain shrinks to floor(8000 / rate), i.e. 2000 at rate 4
+// (+24 st) and 32000 at rate 0.25 (-24 st). Seeds 1..16 make sure the jitter draw reaches both
+// signs; the exact bound must be hit by at least one seed.
+TEST_CASE("engine_extremes: pitch plus jitter is clamped to +-24 st when a grain spawns", "[engine_extremes]")
+{
+    const SampleBuffer src(std::vector<float>(8001, 1.0f), {}, 48000.0);
+    struct Case {
+        float semitones;
+        int bound;
+        bool isMinimum; // +24: lengths must be >= bound, -24: lengths must be <= bound
+    };
+    for (const Case c : {Case{24.0f, 2000, true}, Case{-24.0f, 32000, false}}) {
+        INFO("semitones=" << c.semitones);
+        bool hitBound = false;
+        for (std::uint64_t seed = 1; seed <= 16; ++seed) {
+            INFO("seed=" << seed);
+            GranularEngine e;
+            e.prepare(48000.0, seed);
+            e.setSource(&src);
+            EngineParams p;
+            p.density = 0.1f; // one grain at sample 0
+            p.grainSizeMs = 1000.0f;
+            p.position = 0.0f;
+            p.pitchSemitones = c.semitones;
+            p.pitchJitterSemitones = 12.0f;
+            e.setParams(p);
+            const Out o = render(e, 36000, 3000);
+
+            int lastNonZero = -1;
+            for (int i = 0; i < 36000; ++i)
+                if (o.L[static_cast<std::size_t>(i)] != 0.0f) lastNonZero = i;
+            const int len = lastNonZero + 1;
+            REQUIRE(len > 0);
+            if (c.isMinimum) REQUIRE(len >= c.bound);
+            else REQUIRE(len <= c.bound);
+            if (len == c.bound) hitBound = true;
+        }
+        CHECK(hitBound);
+    }
+}
+
+// R-GR-7 worst case for 1 s with RAW (unclamped) values, the way a host could deliver them:
+// size 1e9 ms, density 1e9, pitch +-100 st and position outside [0, 1]. setParams must clamp
+// before any float-to-int cast, so the output stays finite and bounded while the pool saturates,
+// releases and reacquires. This is the scenario float-cast-overflow targets under clang UBSan.
+TEST_CASE("engine_extremes: 1 s of raw worst-case values stays finite and bounded", "[engine_extremes]")
+{
+    auto coherent = [](std::uint32_t seed) {
+        std::vector<float> v = noise(20000, seed);
+        for (float& x : v) x = 0.9f + 0.1f * x;
+        return v;
+    };
+    const SampleBuffer src(coherent(5), coherent(6), 48000.0);
+    int combos = 0;
+    for (float pitch : {-100.0f, 100.0f})
+        for (float position : {-1.0f, 2.0f}) {
+            INFO("pitch=" << pitch << " position=" << position);
+            GranularEngine e;
+            e.prepare(48000.0, 17);
+            e.setSource(&src);
+            EngineParams p;
+            p.grainSizeMs = 1.0e9f;
+            p.density = 1.0e9f;
+            p.pitchSemitones = pitch;
+            p.position = position;
+            p.positionJitter = 1.0f;
+            p.pitchJitterSemitones = 12.0f;
+            p.timingJitter = 1.0f;
+            p.panSpread = 1.0f;
+            p.gain = 2.0f;
+            e.setParams(p);
+            const Out o = render(e, 48000, 1000);
+            REQUIRE(allFinite(o));
+            REQUIRE(peak(o) <= kCeiling);
+            REQUIRE(noSubnormals(o));
+            CHECK_FALSE(allZero(o));
+            ++combos;
+        }
+    CHECK(combos == 4);
 }
 
 TEST_CASE("engine_extremes: sample rates 22.05 kHz to 192 kHz stay finite and bounded", "[engine_extremes]")

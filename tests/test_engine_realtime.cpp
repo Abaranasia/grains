@@ -8,6 +8,8 @@
 #include "support/AllocationCounter.h"
 #include "support/EngineHelpers.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <vector>
 
@@ -20,20 +22,37 @@ namespace {
 
 constexpr double kSr = 48000.0;
 
+// Anything above this counts as audible output (the noise source and 1 ms grains stay well above it).
+constexpr float kSoundThreshold = 1.0e-3f;
+
+struct RunStats {
+    std::size_t allocs;
+    int maxActive; // highest activeGrainCount() seen after any block
+    float peak;    // largest |sample| seen in any block
+};
+
 // Renders `blocks` blocks of `block` samples inside an AllocationScope and returns the number of
-// allocations. Engine setup and buffer sizing happen before the scope; checks happen after it.
-std::size_t allocationsWhileProcessing(GranularEngine& e, int block, int blocks)
+// allocations plus what the run produced. Engine setup and buffer sizing happen before the scope;
+// checks happen after it. Observation is per block (plain loops, no allocation): grains shorter
+// than a block are released inside it and the buffers are overwritten by the next block, so an
+// end-of-run poll or scan would miss them.
+RunStats allocationsWhileProcessing(GranularEngine& e, int block, int blocks)
 {
     std::vector<float> l(static_cast<std::size_t>(block)), r(static_cast<std::size_t>(block));
     float* const pl = l.data();
     float* const pr = r.data();
-    std::size_t n = 0;
+    RunStats stats{0, 0, 0.0f};
     {
         AllocationScope scope;
-        for (int i = 0; i < blocks; ++i) e.process(pl, pr, block);
-        n = scope.count();
+        for (int i = 0; i < blocks; ++i) {
+            e.process(pl, pr, block);
+            stats.maxActive = std::max(stats.maxActive, e.activeGrainCount());
+            for (int k = 0; k < block; ++k)
+                stats.peak = std::max({stats.peak, std::abs(pl[k]), std::abs(pr[k])});
+        }
+        stats.allocs = scope.count();
     }
-    return n;
+    return stats;
 }
 
 } // namespace
@@ -89,7 +108,7 @@ TEST_CASE("realtime: process() performs zero allocations with normal settings", 
     p.timingJitter = 0.3f;
     p.panSpread = 0.8f;
     e.setParams(p);
-    CHECK(allocationsWhileProcessing(e, 512, 400) == 0);
+    CHECK(allocationsWhileProcessing(e, 512, 400).allocs == 0);
 }
 
 TEST_CASE("realtime: process() performs zero allocations with a full pool", "[realtime][pool_full]")
@@ -107,7 +126,7 @@ TEST_CASE("realtime: process() performs zero allocations with a full pool", "[re
     std::vector<float> l(512), r(512);
     for (int i = 0; i < 40; ++i) e.process(l.data(), r.data(), 512);
     REQUIRE(e.activeGrainCount() == grains::GrainPool::kCapacity);
-    CHECK(allocationsWhileProcessing(e, 512, 200) == 0);
+    CHECK(allocationsWhileProcessing(e, 512, 200).allocs == 0);
     CHECK(e.activeGrainCount() == grains::GrainPool::kCapacity);
 }
 
@@ -137,9 +156,42 @@ TEST_CASE("realtime: process() performs zero allocations at parameter extremes",
                         p.pitchJitterSemitones = jitter * 24.0f;
                         p.position = position;
                         e.setParams(p);
-                        total += allocationsWhileProcessing(e, 512, 20);
+                        const RunStats stats = allocationsWhileProcessing(e, 512, 20);
+                        total += stats.allocs;
+                        if (density == 0.0f) {
+                            CHECK(stats.maxActive == 0);
+                            CHECK(stats.peak == 0.0f);
+                        } else {
+                            CHECK(stats.peak > kSoundThreshold);
+                            // 1000 ms grains from position 0 outlive every block; 1 ms grains and the
+                            // 2-sample move-back grains at position 1 are released inside the block.
+                            if (size == 1000.0f && position == 0.0f) CHECK(stats.maxActive > 0);
+                        }
                     }
     CHECK(total == 0);
+}
+
+// Deterministic saturation: grains outlive the 128-slot pool refill time, so the pool fills at
+// both pitch extremes while process() still allocates nothing.
+TEST_CASE("realtime: a saturating density fills the pool without allocating", "[realtime][pool_full]")
+{
+    const SampleBuffer src(grains_test::noise(48000, 9), grains_test::noise(48000, 10), kSr);
+    for (float pitch : {-24.0f, 24.0f}) {
+        INFO("pitch=" << pitch);
+        GranularEngine e;
+        e.prepare(kSr, 3);
+        e.setSource(&src);
+        EngineParams p;
+        p.grainSizeMs = 1000.0f;
+        p.density = 1000.0f;
+        p.pitchSemitones = pitch;
+        p.position = 0.0f;
+        e.setParams(p);
+        const RunStats stats = allocationsWhileProcessing(e, 512, 20);
+        CHECK(stats.allocs == 0);
+        CHECK(stats.maxActive == grains::GrainPool::kCapacity);
+        CHECK(stats.peak > kSoundThreshold);
+    }
 }
 
 TEST_CASE("realtime: process() performs zero allocations for any block size", "[realtime]")
@@ -155,6 +207,6 @@ TEST_CASE("realtime: process() performs zero allocations for any block size", "[
         p.grainSizeMs = 200.0f;
         p.timingJitter = 0.5f;
         e.setParams(p);
-        CHECK(allocationsWhileProcessing(e, block, block == 1 ? 4000 : 40) == 0);
+        CHECK(allocationsWhileProcessing(e, block, block == 1 ? 4000 : 40).allocs == 0);
     }
 }
