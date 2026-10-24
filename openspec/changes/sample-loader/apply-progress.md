@@ -1,7 +1,7 @@
 # Apply Progress: sample-loader
 
-Mode: Strict TDD. Delivery: single PR, size:exception recorded. Build dir `build/apply-sl` (MSVC, plugin OFF).
-Group 1 (tasks 1.1-1.12) DONE. 1.13 gate checks done, commit pending (orchestrator). Group 1 committed as 3b50ffb. Group 2 (tasks 2.1-2.6) DONE, commit (2.7) and manual 2.8 pending.
+Mode: Strict TDD. Delivery: single PR; size:exception approved by the user on 2026-10-24 (~1010 changed code+test lines vs 800 budget; split into core/plugin PRs offered and declined). Build dir `build/apply-sl` (MSVC, plugin OFF).
+Status: all tasks done. Group 1 committed as 3b50ffb, Group 2 as 63756b9. Manual 2.8: all 12 Standalone checks confirmed by the user on 2026-10-24. Docs 3.1: README updated (it described the silent shell).
 
 ## TDD Cycle Evidence
 

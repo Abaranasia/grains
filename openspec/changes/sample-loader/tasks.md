@@ -67,15 +67,15 @@ JUCE glue has no unit tests; RED is a failing build or verification step. Tasks 
 - [x] 2.4 `setStateInformation`: request Restore only in valid-XML + tag-match branch after `replaceState`; empty path clears; non-absolute path treated as missing (`juce::File::isAbsolutePath`). (R-PS-7, R-SS-8, R-SS-9)
 - [x] 2.5 `Source/plugin/PluginEditor.{h,cpp}`: `GenericAudioProcessorEditor` + Load button (`FileChooser` `*.wav;*.aiff;*.aif`, SafePointer) + status label, `FileDragAndDropTarget` (case-insensitive ext, ignore others), `ChangeListener` removed in dtor. (R-PS-6, R-SS-10)
 - [x] 2.6 Automated verification: plugin OFF build + `ctest` still green; `cmake --build build-plugin --target grains_plugin --config Debug` succeeds with no new warnings.
-- [ ] 2.7 Commit gate: 2.6 passes. Commit `feat(plugin): add sample loader, state restore and editor`.
+- [x] 2.7 Commit gate: 2.6 passes. Commit `feat(plugin): add sample loader, state restore and editor` (committed as 63756b9).
 
-### 2.8 Manual verification in Standalone (human required) - PENDING USER
+### 2.8 Manual verification in Standalone (human required)
 
-- [ ] 2.8 MANUAL (pending user): (1) Load button loads wav, label shows name; (2) drag aiff loads; (3) drop .txt ignored; (4) replace while playing, no crash; (5) two quick loads, second wins; (6) corrupt file keeps previous source, error status; (7) state round trip restores path and 9 params, reloads async; (8) moved file gives silence, "Missing: name", path kept on re-save; (9) close during large load, no crash or hang; (10) peak <= 4; (11) 44.1/48/96 kHz and mono layout; (12) silence with no sample for 30 s.
+- [x] 2.8 MANUAL (all 12 items confirmed by user 2026-10-24 in the Debug Standalone built from 63756b9): (1) Load button loads wav, label shows name; (2) drag aiff loads; (3) drop .txt ignored; (4) replace while playing, no crash; (5) two quick loads, second wins; (6) corrupt file keeps previous source, error status; (7) state round trip restores path and 9 params, reloads async; (8) moved file gives silence, "Missing: name", path kept on re-save; (9) close during large load, no crash or hang; (10) peak <= 4; (11) 44.1/48/96 kHz and mono layout; (12) silence with no sample for 30 s.
 
 ## Commit 3: docs (only if needed)
 
-- [ ] 3.1 Add a short README/build note on loading samples and the absolute-path state caveat, only if existing docs reference the silent shell. Commit `docs: describe sample loader`. Skip otherwise.
+- [x] 3.1 Add a short README/build note on loading samples and the absolute-path state caveat, only if existing docs reference the silent shell. Commit `docs: describe sample loader`. Skip otherwise. (README described the silent shell; replaced.)
 
 ## Requirement Traceability
 
