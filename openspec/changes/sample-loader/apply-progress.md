@@ -1,7 +1,7 @@
 # Apply Progress: sample-loader
 
 Mode: Strict TDD. Delivery: single PR, size:exception recorded. Build dir `build/apply-sl` (MSVC, plugin OFF).
-Group 1 (tasks 1.1-1.12) DONE. 1.13 gate checks done, commit pending (orchestrator). Group 2 (plugin) not started.
+Group 1 (tasks 1.1-1.12) DONE. 1.13 gate checks done, commit pending (orchestrator). Group 1 committed as 3b50ffb. Group 2 (tasks 2.1-2.6) DONE, commit (2.7) and manual 2.8 pending.
 
 ## TDD Cycle Evidence
 
@@ -32,3 +32,17 @@ REFACTOR: none needed beyond a clarified comment. `git diff` shows no sabotage (
 Group-1 changed lines ~638 (tracked diff 102 + new files 536) vs forecast ~415; over by ~220 (tests are ~460 of it). Shrink order not applied; total with plugin forecast (~315) would reach ~950 > 800 budget. Orchestrator should decide (trim tests or accept).
 
 Warnings: MSVC /W4 /WX clean. clang/gcc not installed; reviewed manually for -Wall -Wextra -Wpedantic.
+
+## Group 2 (plugin)
+
+Mode: Strict TDD (JUCE glue not unit-testable; verification = builds + full ctest, manual 2.8 pending user).
+
+| Task | RED | GREEN | Notes |
+|------|-----|-------|-------|
+| 2.1-2.5 | First plugin build failed: C2039 `juce::MessageManager` (missing juce_events include) and SafePointer capture errors in editor | Fixed includes and SafePointer local; build-plugin grains_plugin builds (VST3 + Standalone) | |
+| 2.6 | n/a | `cmake --build build-plugin --target grains_plugin --config Debug` OK, no warnings after touching all plugin sources; core build/apply-sl clean, ctest 111/111 | |
+
+Files: new Source/plugin/{SampleLoader,PluginEditor}.{h,cpp}; modified PluginProcessor.{h,cpp}, plugin CMakeLists.txt.
+Changed lines: tracked diff 45+/6-, new files 330 lines total (see git diff --stat); size:exception.
+Deviations: SampleLoader::request takes a path String (not File) so non-absolute paths never reach juce::File; Result carries path/text/loaded. Dtor also calls stop() (idempotent) since juce::Thread asserts if running.
+Work Unit Evidence: focused = plugin build above; runtime = manual 2.8 pending; rollback = revert commit 2 only.

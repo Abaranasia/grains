@@ -55,18 +55,18 @@ Tasks 1.1 to 1.12 are sequential except 1.1/1.2 (different files). Baseline test
 - [x] 1.12 RED/GREEN: table-driven rejection cases NoChannels (0 ch, null data), NoFrames, BadSampleRate (0, -44100, NaN, Inf), MismatchedLengths (R-SS-6); no throw.
 
 ### Phase 4: Gate
-- [ ] 1.13 Commit gate (checks done: Debug build zero warnings, ctest 111/111, no juce includes in Source/core; COMMIT PENDING, not done by apply): full Debug build with zero warnings (`/WX`), `ctest` all green; `rg -n "juce" Source/core` has no include matches. Commit `feat(core): add SourceExchange and sample builder` (no AI attribution).
+- [x] 1.13 Commit gate (Debug build zero warnings, ctest 111/111, no juce includes in Source/core; committed as 3b50ffb): full Debug build with zero warnings (`/WX`), `ctest` all green; `rg -n "juce" Source/core` has no include matches. Commit `feat(core): add SourceExchange and sample builder` (no AI attribution).
 
 ## Commit 2: `feat(plugin): add sample loader, state restore and editor`
 
 JUCE glue has no unit tests; RED is a failing build or verification step. Tasks 2.1 to 2.5 are sequential; 2.6 depends on 2.3.
 
-- [ ] 2.1 `Source/plugin/SampleLoader.{h,cpp}` + `Source/plugin/CMakeLists.txt`: `juce::Thread`, `request(File, Origin)`, generation counter, chunked read (65536), build, `publish; collect;`, Restore failure `publish(nullptr)` "Missing: name", `alive` flag, `stop()`. (R-SS-7, R-SS-9) Verify: plugin build.
-- [ ] 2.2 `Source/plugin/PluginProcessor.{h,cpp}`: members in order `apvts_, raw_, exchange_, engine_, scratch_, status_, broadcaster_, loader_`; `~GrainsAudioProcessor(){ loader_.stop(); }`; `onLoadResult` drops stale generation, sets status, `samplePath` property on User success. (R-SS-7, R-SS-8)
-- [ ] 2.3 `processBlock`: `acquire()` at top after `ScopedNoDenormals`, before guards; `setSource` only when `changed`. (R-PS-4, R-SS-3)
-- [ ] 2.4 `setStateInformation`: request Restore only in valid-XML + tag-match branch after `replaceState`; empty path clears; non-absolute path treated as missing (`juce::File::isAbsolutePath`). (R-PS-7, R-SS-8, R-SS-9)
-- [ ] 2.5 `Source/plugin/PluginEditor.{h,cpp}`: `GenericAudioProcessorEditor` + Load button (`FileChooser` `*.wav;*.aiff;*.aif`, SafePointer) + status label, `FileDragAndDropTarget` (case-insensitive ext, ignore others), `ChangeListener` removed in dtor. (R-PS-6, R-SS-10)
-- [ ] 2.6 Automated verification: plugin OFF build + `ctest` still green; `cmake --build build-plugin --target grains_plugin --config Debug` succeeds with no new warnings.
+- [x] 2.1 `Source/plugin/SampleLoader.{h,cpp}` + `Source/plugin/CMakeLists.txt`: `juce::Thread`, `request(File, Origin)`, generation counter, chunked read (65536), build, `publish; collect;`, Restore failure `publish(nullptr)` "Missing: name", `alive` flag, `stop()`. (R-SS-7, R-SS-9) Verify: plugin build.
+- [x] 2.2 `Source/plugin/PluginProcessor.{h,cpp}`: members in order `apvts_, raw_, exchange_, engine_, scratch_, status_, broadcaster_, loader_`; `~GrainsAudioProcessor(){ loader_.stop(); }`; `onLoadResult` drops stale generation, sets status, `samplePath` property on User success. (R-SS-7, R-SS-8)
+- [x] 2.3 `processBlock`: `acquire()` at top after `ScopedNoDenormals`, before guards; `setSource` only when `changed`. (R-PS-4, R-SS-3)
+- [x] 2.4 `setStateInformation`: request Restore only in valid-XML + tag-match branch after `replaceState`; empty path clears; non-absolute path treated as missing (`juce::File::isAbsolutePath`). (R-PS-7, R-SS-8, R-SS-9)
+- [x] 2.5 `Source/plugin/PluginEditor.{h,cpp}`: `GenericAudioProcessorEditor` + Load button (`FileChooser` `*.wav;*.aiff;*.aif`, SafePointer) + status label, `FileDragAndDropTarget` (case-insensitive ext, ignore others), `ChangeListener` removed in dtor. (R-PS-6, R-SS-10)
+- [x] 2.6 Automated verification: plugin OFF build + `ctest` still green; `cmake --build build-plugin --target grains_plugin --config Debug` succeeds with no new warnings.
 - [ ] 2.7 Commit gate: 2.6 passes. Commit `feat(plugin): add sample loader, state restore and editor`.
 
 ### 2.8 Manual verification in Standalone (human required) - PENDING USER

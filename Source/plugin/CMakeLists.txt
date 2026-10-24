@@ -13,8 +13,12 @@ juce_add_plugin(GrainsPlugin
   COPY_PLUGIN_AFTER_BUILD FALSE)
 
 target_sources(GrainsPlugin PRIVATE
+  PluginEditor.cpp
+  PluginEditor.h
   PluginProcessor.cpp
-  PluginProcessor.h)
+  PluginProcessor.h
+  SampleLoader.cpp
+  SampleLoader.h)
 
 target_compile_definitions(GrainsPlugin PUBLIC
   JUCE_WEB_BROWSER=0
