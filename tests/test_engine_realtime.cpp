@@ -4,6 +4,7 @@
 #include <grains/GrainPool.h>
 #include <grains/GranularEngine.h>
 #include <grains/SampleBuffer.h>
+#include <grains/SourceExchange.h>
 
 #include "support/AllocationCounter.h"
 #include "support/EngineHelpers.h"
@@ -11,6 +12,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <vector>
 
 using grains::EngineParams;
@@ -92,6 +95,27 @@ TEST_CASE("realtime: the allocation counter sees allocations inside its scope on
         delete o;
     }
     CHECK(aligned >= 1);
+}
+
+// The free counter ignores null deletes and frees outside a scope (R-SS-3).
+TEST_CASE("realtime: the allocation counter counts non-null frees inside its scope only", "[realtime]")
+{
+    auto* outside = new int(1);
+    std::size_t frees = 99;
+    {
+        AllocationScope scope;
+        delete outside; // freed inside the scope: counted
+        int* none = nullptr;
+        delete none; // null: not counted
+        frees = scope.frees();
+    }
+    CHECK(frees == 1);
+    auto* q = new int(2);
+    {
+        AllocationScope scope;
+        CHECK(scope.frees() == 0);
+    }
+    delete q; // outside any scope
 }
 
 TEST_CASE("realtime: process() performs zero allocations with normal settings", "[realtime]")
@@ -209,4 +233,55 @@ TEST_CASE("realtime: process() performs zero allocations for any block size", "[
         e.setParams(p);
         CHECK(allocationsWhileProcessing(e, block, block == 1 ? 4000 : 40).allocs == 0);
     }
+}
+
+namespace {
+
+std::unique_ptr<SampleBuffer> noiseBuffer(std::uint32_t seed)
+{
+    return std::make_unique<SampleBuffer>(grains_test::noise(48000, seed), grains_test::noise(48000, seed + 1), kSr);
+}
+
+// R-SS-3: the consumer side of a swap (acquire, retire, setSource, process) neither allocates nor
+// frees. publish allocates the Box, so it runs before the scope; collect (the free) never runs in it.
+void checkSwapIsRealtimeSafe(bool clear)
+{
+    grains::SourceExchange<SampleBuffer> x;
+    GranularEngine e;
+    e.prepare(kSr, 1);
+    EngineParams p;
+    p.density = 40.0f;
+    p.grainSizeMs = 80.0f;
+    e.setParams(p);
+    x.publish(noiseBuffer(21));
+    e.setSource(x.acquire().source);
+    x.publish(clear ? nullptr : noiseBuffer(23));
+    std::vector<float> l(512), r(512);
+    std::size_t allocs = 99, frees = 99;
+    bool changed = false;
+    {
+        AllocationScope scope;
+        const auto acquired = x.acquire();
+        changed = acquired.changed;
+        e.setSource(acquired.source);
+        for (int i = 0; i < 50; ++i) e.process(l.data(), r.data(), 512);
+        allocs = scope.count();
+        frees = scope.frees();
+    }
+    CHECK(changed);
+    CHECK(allocs == 0);
+    CHECK(frees == 0);
+    x.collect();
+}
+
+} // namespace
+
+TEST_CASE("realtime: acquiring a swapped source and processing allocates and frees nothing", "[realtime][exchange]")
+{
+    checkSwapIsRealtimeSafe(false);
+}
+
+TEST_CASE("realtime: acquiring a cleared source and processing allocates and frees nothing", "[realtime][exchange]")
+{
+    checkSwapIsRealtimeSafe(true);
 }

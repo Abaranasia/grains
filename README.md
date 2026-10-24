@@ -21,4 +21,9 @@ build directory:
   fails with a clear error if it has no `CMakeLists.txt`.
 - The plugin targets are excluded from `all`; build them by target name (or `grains_plugin` for both).
 - `GRAINS_SANITIZE=ON` together with the plugin is unsupported.
-- The current plugin is a silent shell: 9 automatable parameters, generic editor, no sample loader.
+- The plugin granulates a loaded sample: use the Load button or drop a `.wav`/`.aiff`/`.aif` file
+  on the editor. With no sample it outputs silence. Files longer than 5 minutes are truncated.
+- The engine plays continuously once a sample loads (no MIDI gating) and has no limiter (output
+  can reach +12 dBFS), so start with a low monitoring level.
+- Sessions store the sample's absolute path, not the audio. If the file moves, the plugin stays
+  silent and shows "Missing: <name>".

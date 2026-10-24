@@ -22,6 +22,7 @@ if(catch2_SOURCE_DIR)
   list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 endif()
 include(Catch)
+find_package(Threads REQUIRED)
 
 add_executable(grains_tests
   test_harness.cpp
@@ -39,9 +40,11 @@ add_executable(grains_tests
   test_engine_extremes.cpp
   test_engine_loudness.cpp
   test_engine_pool_full.cpp
-  test_param_spec.cpp)
+  test_param_spec.cpp
+  test_source_exchange.cpp
+  test_sample_builder.cpp)
 target_include_directories(grains_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(grains_tests PRIVATE grains_core Catch2::Catch2WithMain)
+target_link_libraries(grains_tests PRIVATE grains_core Catch2::Catch2WithMain Threads::Threads)
 grains_set_warnings(grains_tests)
 catch_discover_tests(grains_tests)
 

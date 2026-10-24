@@ -1,14 +1,18 @@
 #include "PluginProcessor.h"
 
+#include "PluginEditor.h"
+
 #include <algorithm>
 
 namespace {
 namespace pm = grains::params;
+const juce::Identifier kSamplePath{"samplePath"};
 } // namespace
 
 GrainsAudioProcessor::GrainsAudioProcessor()
     : juce::AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts_(*this, nullptr, "GrainsState", createLayout())
+      apvts_(*this, nullptr, "GrainsState", createLayout()),
+      loader_(exchange_, [this](const SampleLoader::Result& r) { onLoadResult(r); })
 {
     for (int i = 0; i < pm::kCount; ++i)
         raw_[static_cast<std::size_t>(i)] = apvts_.getRawParameterValue(pm::kSpecs[static_cast<std::size_t>(i)].id);
@@ -43,6 +47,8 @@ bool GrainsAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) co
 void GrainsAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+    // Adopt a newly published source first so a swap is never stuck behind an early return.
+    if (const auto r = exchange_.acquire(); r.changed) engine_.setSource(r.source);
     midi.clear(); // MIDI is accepted and ignored in this version
 
     std::array<float, pm::kCount> plain{};
@@ -76,7 +82,7 @@ void GrainsAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 
 juce::AudioProcessorEditor* GrainsAudioProcessor::createEditor()
 {
-    return new juce::GenericAudioProcessorEditor(*this);
+    return new GrainsEditor(*this);
 }
 
 void GrainsAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
@@ -90,7 +96,19 @@ void GrainsAudioProcessor::setStateInformation(const void* data, int sizeInBytes
     if (data == nullptr || sizeInBytes <= 0) return;
     if (const auto xml = getXmlFromBinary(data, sizeInBytes))
         if (xml->hasTagName(apvts_.state.getType()))
+        {
             apvts_.replaceState(juce::ValueTree::fromXml(*xml));
+            loader_.request(apvts_.state.getProperty(kSamplePath).toString(), SampleLoader::Origin::Restore);
+        }
+}
+
+void GrainsAudioProcessor::onLoadResult(const SampleLoader::Result& r)
+{
+    if (r.generation < loader_.latestGeneration()) return; // superseded by a newer request
+    status_ = r.text;
+    if (r.loaded && r.origin == SampleLoader::Origin::User)
+        apvts_.state.setProperty(kSamplePath, r.path, nullptr);
+    broadcaster_.sendChangeMessage();
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

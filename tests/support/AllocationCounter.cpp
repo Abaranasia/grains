@@ -12,10 +12,16 @@ namespace {
 
 std::atomic<bool> gActive{false};
 std::atomic<std::size_t> gCount{0};
+std::atomic<std::size_t> gFrees{0};
 
 void note() noexcept
 {
     if (gActive.load(std::memory_order_relaxed)) gCount.fetch_add(1, std::memory_order_relaxed);
+}
+
+void noteFree(void* p) noexcept
+{
+    if (p != nullptr && gActive.load(std::memory_order_relaxed)) gFrees.fetch_add(1, std::memory_order_relaxed);
 }
 
 void* plainAlloc(std::size_t n) noexcept
@@ -37,10 +43,15 @@ void* alignedAlloc(std::size_t n, std::size_t align) noexcept
 #endif
 }
 
-void plainFree(void* p) noexcept { std::free(p); }
+void plainFree(void* p) noexcept
+{
+    noteFree(p);
+    std::free(p);
+}
 
 void alignedFree(void* p) noexcept
 {
+    noteFree(p);
 #if defined(_MSC_VER)
     _aligned_free(p);
 #else
@@ -61,12 +72,15 @@ namespace grains_test {
 AllocationScope::AllocationScope() noexcept
 {
     gCount.store(0, std::memory_order_relaxed);
+    gFrees.store(0, std::memory_order_relaxed);
     gActive.store(true, std::memory_order_relaxed);
 }
 
 AllocationScope::~AllocationScope() { gActive.store(false, std::memory_order_relaxed); }
 
 std::size_t AllocationScope::count() const noexcept { return gCount.load(std::memory_order_relaxed); }
+
+std::size_t AllocationScope::frees() const noexcept { return gFrees.load(std::memory_order_relaxed); }
 
 } // namespace grains_test
 

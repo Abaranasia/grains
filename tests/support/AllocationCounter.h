@@ -20,6 +20,9 @@ public:
 
     // Number of operator new calls (any variant) since this scope began.
     std::size_t count() const noexcept;
+
+    // Number of non-null operator delete calls (any variant) since this scope began.
+    std::size_t frees() const noexcept;
 };
 
 } // namespace grains_test
