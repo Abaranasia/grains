@@ -83,7 +83,9 @@ void SampleLoader::load(const Request& r)
 {
     const auto isCurrent = [&] { return !threadShouldExit() && gate_.current() == r.generation; };
 
-    if (r.candidates.isEmpty() && r.origin == Origin::Restore) {
+    // Nothing stored at all: "No sample". A stored path with no usable candidate falls through
+    // to the "Missing: <name>" failure below (R-SS-14).
+    if (r.candidates.isEmpty() && r.origin == Origin::Restore && r.original.isEmpty()) {
         auto clear = exchange_.stageClear();
         if (!clear) { // Box allocation failed: keep the previous source
             if (isCurrent()) post(r, false, "Error: No sample");
@@ -94,7 +96,7 @@ void SampleLoader::load(const Request& r)
     }
 
     // Labels use the stored name until a candidate is found, then the found file's name.
-    juce::String name = r.displayName;
+    juce::String name = r.displayName.isNotEmpty() ? r.displayName : r.original;
 
     // Restore failure clears the source ("Missing"); a user load failure keeps the previous one.
     const auto fail = [&] {

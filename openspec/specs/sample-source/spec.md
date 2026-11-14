@@ -150,7 +150,7 @@ The plugin MUST decode a requested file on a background thread, never on the aud
 - Then shutdown waits for the read to return or fail, no "killing thread by force" message is emitted, and once the read ends the process exits without crash or undefined behaviour
 
 ### R-SS-8 Path persistence and async reload
-The loaded file's reference MUST be stored as properties on the processor's `apvts_.state` and MUST be saved and restored through `getStateInformation` / `setStateInformation`. The reference MUST consist of: `samplePath` (the absolute path, always written, unchanged from the previous format), `sampleName` (the file name without directories), and, only when the file lies under an anchor (Music, Documents, Desktop, or Home; the longest matching anchor wins), `sampleAnchor` (the anchor identifier) and `sampleRel` (the path relative to that anchor). After state restore, the file MUST be reloaded asynchronously through the loader without blocking the calling thread, by trying the ordered candidate list defined in R-SS-12 and loading the first candidate that exists. State written by the previous format (only `samplePath`) MUST still restore. State written by this format MUST remain readable by code that knows only `samplePath`. Embedded audio, a last-used directory, rewriting state after a relocated restore, recursive search, and a content hash or size check are not provided.
+The loaded file's reference MUST be stored as properties on the processor's `apvts_.state` and MUST be saved and restored through `getStateInformation` / `setStateInformation`. The reference MUST consist of: `samplePath` (the absolute path, always written, unchanged from the previous format), `sampleName` (the file name without directories), and, only when the file lies under an anchor (Music, Documents, Desktop, or Home; the longest matching anchor wins), `sampleAnchor` (the anchor key: `music`, `documents`, `desktop`, or `home`) and `sampleRel` (the path relative to that anchor). After state restore, the file MUST be reloaded asynchronously through the loader without blocking the calling thread, by trying the ordered candidate list defined in R-SS-12 and loading the first candidate that exists. The plugin's search directories MUST be exactly this machine's four anchor directories (music, documents, desktop, home, in that order); the name search MUST look only directly inside each of them (non-recursive). State written by the previous format (only `samplePath`) MUST still restore. State written by this format MUST remain readable by code that knows only `samplePath`. Embedded audio, a last-used directory, rewriting state after a relocated restore, recursive search, and a content hash or size check are not provided.
 
 #### Scenario: State round trip restores file [Manual]
 - Given a loaded file and non-default parameters
@@ -160,7 +160,7 @@ The loaded file's reference MUST be stored as properties on the processor's `apv
 #### Scenario: Anchored file writes all reference fields [Manual]
 - Given a file loaded from under the user's Music folder
 - When state is saved
-- Then the state holds `samplePath`, `sampleName`, `sampleAnchor` (Music) and `sampleRel`
+- Then the state holds `samplePath`, `sampleName`, `sampleAnchor` (`music`) and `sampleRel`
 
 #### Scenario: File outside every anchor writes no anchor fields [Manual]
 - Given a file loaded from a folder that is under no anchor
@@ -276,21 +276,23 @@ A JUCE-free core primitive (the generation gate) MUST own a request generation c
 ### R-SS-12 Sample path resolver: reference and candidates
 A JUCE-free core unit `grains::SamplePathResolver` MUST use `std::string` only (no JUCE, no `std::filesystem`) and MUST provide three operations.
 
-`makeRef(absolute, anchors)` MUST produce a reference holding the absolute path, the file name, and, when the path lies under one of the supplied anchors, that anchor's identifier and the path relative to it. The longest matching anchor MUST win. Anchor matching MUST be on whole path components only (an anchor `C:\Users\a` MUST NOT match `C:\Users\ab\x.wav`). An anchor that equals the whole path (no file component) MUST NOT match. A path containing a `..` component MUST NOT get an anchor. The stored relative path MUST use `/` as separator, and restoring a stored relative path MUST normalise any `\` in it to `/`.
+`makeRef(absolute, anchors)` MUST produce a reference holding the absolute path, the file name, and, when the path lies under one of the supplied anchors, that anchor's identifier and the path relative to it. The longest matching anchor MUST win. Anchor matching MUST be on whole path components only (an anchor `C:\Users\a` MUST NOT match `C:\Users\ab\x.wav`). An anchor that equals the whole path (no file component) MUST NOT match. A path containing a `..` component MUST NOT get an anchor. The stored relative path MUST use `/` as separator. Restoring a stored relative path MUST normalise any `\` in it to `/` only when the stored absolute path is not POSIX-shaped; when it is POSIX-shaped, `\` is a file-name character and MUST be kept.
 
-`candidates(ref, anchors, searchDirs)` MUST return an ordered, deduplicated list of paths: (1) the reference's anchor, resolved against this machine's `anchors`, joined with its relative path, when the reference has an anchor and this machine supplies that anchor; (2) the stored absolute path; (3) the file name joined to each search directory, in the given order. The list MUST NOT hold more than 10 entries; entries beyond the cap MUST be dropped from the end. The list MUST be empty when the reference has no usable path and no usable name.
+`candidates(ref, anchors, searchDirs)` MUST return an ordered, deduplicated list of paths: (1) the reference's anchor, resolved against this machine's `anchors`, joined with its relative path, when the reference has an anchor and this machine supplies that anchor; (2) the stored absolute path; (3) the file name joined to each search directory, in the given order. The list MUST NOT hold more than 10 entries; entries beyond the cap MUST be dropped from the end. The list MUST be empty when the stored absolute path is empty (see R-SS-13), regardless of the other reference fields.
+
+Stored values MUST be validated before use. A stored relative path that is empty, absolute, or contains an empty, `.` or `..` component MUST be ignored, and no anchor candidate MUST be produced from it. A stored name that is empty, `.`, `..`, or contains a separator (`/`, or `\` when the stored absolute path is not POSIX-shaped) MUST be ignored in favour of the name derived from the absolute path. When joining onto a Windows-shaped directory (an anchor or a search directory), a relative path or name containing `\` or `:` MUST be skipped, so that no candidate escapes that directory.
 
 `resolve(candidates, exists)` MUST call the injected predicate on candidates in order and return the first candidate for which it returns true, together with its index; it MUST return a not-found result when no candidate exists, and MUST NOT call the predicate on later candidates once one matches. No operation MAY touch the filesystem itself.
 
 #### Scenario: makeRef finds an anchor [Catch2]
-- Given anchors Music=`C:\Users\a\Music` and Home=`C:\Users\a`, and the path `C:\Users\a\Music\loops\kick.wav`
+- Given anchors `music`=`C:\Users\a\Music` and `home`=`C:\Users\a`, and the path `C:\Users\a\Music\loops\kick.wav`
 - When `makeRef` runs
-- Then the anchor is Music, the relative path is `loops/kick.wav` (stored relative paths always use `/`), the name is `kick.wav`, and the absolute path is unchanged
+- Then the anchor is `music`, the relative path is `loops/kick.wav` (stored relative paths always use `/`), the name is `kick.wav`, and the absolute path is unchanged
 
 #### Scenario: Longest anchor wins [Catch2]
 - Given the same anchors and the path `C:\Users\a\Music\kick.wav` (which lies under both)
 - When `makeRef` runs
-- Then the anchor is Music and not Home
+- Then the anchor is `music` and not `home`
 
 #### Scenario: Anchor matches whole components only [Catch2]
 - Given the anchor `C:\Users\a` and the path `C:\Users\ab\kick.wav`
@@ -305,7 +307,7 @@ A JUCE-free core unit `grains::SamplePathResolver` MUST use `std::string` only (
 #### Scenario: Windows drive match ignores case [Catch2]
 - Given the anchor `C:\Users\a\Music` and the path `c:\users\A\MUSIC\Kick.wav`
 - When `makeRef` runs
-- Then the anchor is Music and the relative path is `Kick.wav` (original case preserved)
+- Then the anchor is `music` and the relative path is `Kick.wav` (original case preserved)
 
 #### Scenario: UNC path matches case-insensitively [Catch2]
 - Given the anchor `\\Server\Share\Music` and the path `\\server\share\music\loops\kick.wav`
@@ -338,12 +340,12 @@ A JUCE-free core unit `grains::SamplePathResolver` MUST use `std::string` only (
 - Then each name is `kick.wav`
 
 #### Scenario: Candidate order is anchor, absolute, then search directories [Catch2]
-- Given a reference with anchor Music, relative path `loops/kick.wav`, and absolute path `C:\old\kick.wav`; this machine's Music is `D:\Music`; search directories `E:\a` and `E:\b`
+- Given a reference with anchor `music`, relative path `loops/kick.wav`, and absolute path `C:\old\kick.wav`; this machine's `music` anchor is `D:\Music`; search directories `E:\a` and `E:\b`
 - When `candidates` runs
 - Then the list is `D:\Music\loops\kick.wav`, `C:\old\kick.wav`, `E:\a\kick.wav`, `E:\b\kick.wav`, in that order
 
 #### Scenario: Missing anchor on this machine is skipped [Catch2]
-- Given a reference with anchor Music and this machine's anchors lacking Music
+- Given a reference with anchor `music` and this machine's anchors lacking `music`
 - When `candidates` runs
 - Then the list starts with the stored absolute path
 
@@ -366,6 +368,16 @@ A JUCE-free core unit `grains::SamplePathResolver` MUST use `std::string` only (
 - Given the search directory `E:\a\` and `E:\a`
 - When `candidates` runs with both
 - Then exactly one `E:\a\kick.wav` entry appears
+
+#### Scenario: Unsafe stored name or relative path is ignored [Catch2]
+- Given a reference with anchor `music`, absolute path `C:\old\kick.wav`, and either relative path `../../kick.wav` with name `..`, or name `x\kick.wav`; this machine's `music` anchor is `D:\Music`; search directory `E:\a`
+- When `candidates` runs
+- Then no anchor candidate is produced and the list is `C:\old\kick.wav` then `E:\a\kick.wav` (the name derived from the absolute path is used)
+
+#### Scenario: Backslash or colon never escapes a Windows directory [Catch2]
+- Given a POSIX-shaped reference `/old/x.wav` whose relative path is `a\..\..\x` under anchor `music`=`D:\Music`, a POSIX name `..\..\x.wav` with search directories `E:\a` and `/m`, and a name `a:b.wav` with search directories `E:\a` and `/m`
+- When `candidates` runs on each
+- Then no candidate is joined onto `D:\Music` or `E:\a`, while the POSIX directory `/m` still receives the name unchanged
 
 #### Scenario: Resolve returns the first existing candidate [Catch2]
 - Given candidates A, B, C and a fake predicate that is true for B and C
@@ -406,7 +418,7 @@ Restoring state that holds `samplePath` but neither `sampleName` nor the anchor 
 - Then output is silent and the label reads "No sample"
 
 ### R-SS-14 Candidate loading and relocated status
-The loader MUST accept an ordered candidate list for a request and MUST load the first candidate that exists, probing sequentially on the loader thread only (never the audio or message thread). The load result MUST report the path actually loaded. A user load MUST use a single-entry list. The generation gate, locking, atomic commit, and clear semantics of R-SS-7, R-SS-9, and R-SS-11 MUST be unchanged by the candidate list. When a Restore loads any candidate other than the stored absolute path (the anchor-joined path on this machine, when it differs from the stored path, or a search-directory path), the status label MUST read "Loaded: <name> (relocated)", where `<name>` is the file name; a Restore that loads the stored absolute path MUST NOT show "(relocated)". When no candidate exists or loads, behavior MUST be that of R-SS-9: the source is cleared, the stored reference is kept unchanged, and the label reads "Missing: <name>" (the stored `sampleName` or, for legacy state, the name derived from `samplePath`). A relocated Restore MUST NOT modify the stored reference. The "(relocated)" text and the truncation text of R-SS-10 MUST both appear when both apply.
+The loader MUST accept an ordered candidate list for a request and MUST load the first candidate that exists, probing sequentially on the loader thread only (never the audio or message thread). The load result MUST report the path actually loaded. A user load MUST use a single-entry list. The generation gate, locking, atomic commit, and clear semantics of R-SS-7, R-SS-9, and R-SS-11 MUST be unchanged by the candidate list. When a Restore loads any candidate other than the stored absolute path (the anchor-joined path on this machine, when it differs from the stored path, or a search-directory path), the status label MUST read "Loaded: <name> (relocated)", where `<name>` is the file name; a Restore that loads the stored absolute path MUST NOT show "(relocated)". The label MUST read "No sample" only when the stored `samplePath` is empty. Otherwise, when the candidate list is empty or no candidate exists or loads, behavior MUST be that of R-SS-9: the source is cleared, the stored reference is kept unchanged, and the label reads "Missing: <name>", where `<name>` is the stored `sampleName`, else the name derived from `samplePath`, else the stored `samplePath` itself. The search directories (R-SS-8) are the four anchor directories, searched non-recursively. A relocated Restore MUST NOT modify the stored reference. The "(relocated)" text and the truncation text of R-SS-10 MUST both appear when both apply.
 
 #### Scenario: Relocated by anchor [Manual]
 - Given a sample under the user's Music folder saved on one account, and the same relative layout under a different account's Music folder
@@ -414,9 +426,14 @@ The loader MUST accept an ordered candidate list for a request and MUST load the
 - Then the sample loads from the new location and the label reads "Loaded: <name> (relocated)"
 
 #### Scenario: Moved parent folder reloads with hint [Manual]
-- Given a project saved with a sample under Documents, then the sample moved to another folder inside a search directory
+- Given a project saved with a sample in a subfolder of Documents, then the sample file moved directly into another anchor folder (for example directly into Music)
 - When state is reloaded
 - Then the sample loads and the label reads "Loaded: <name> (relocated)"
+
+#### Scenario: Nested subfolder is not searched [Manual]
+- Given a project saved with a sample in a subfolder of Documents, then the sample file moved into a nested subfolder of another anchor folder (for example `Music/new/`)
+- When state is reloaded
+- Then the name search does not find it, output is silent, and the label reads "Missing: <name>"
 
 #### Scenario: Unmoved file shows no hint [Manual]
 - Given state whose stored absolute path still exists

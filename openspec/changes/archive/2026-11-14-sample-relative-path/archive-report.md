@@ -1,7 +1,7 @@
 # Archive Report: sample-relative-path
 
 **Archived**: 2026-11-14
-**Archive path**: `openspec/changes/archive/2026-11-14-sample-relative-path/` (copied by the archive executor; the original `openspec/changes/sample-relative-path/` must be deleted, see Risks)
+**Archive path**: `openspec/changes/archive/2026-11-14-sample-relative-path/` (copied by the archive executor; the orchestrator verified the copies, removed the original `openspec/changes/sample-relative-path/`, and committed the archive as 1b4e1e4, see Risks)
 **Mode**: hybrid (openspec + engram `sdd/sample-relative-path/*`)
 **Branch**: feat/sample-relative-path-plugin (chained PR2 on top of PR1 feat/sample-relative-path)
 **Verdict carried from verify**: PASS WITH WARNINGS (0 CRITICAL, 5 WARNING, 3 SUGGESTION; Engram #637)
@@ -14,12 +14,9 @@
 | PR1 feat(core) | 960fec4 | feat(core): add SamplePathResolver for relocatable sample references (branch feat/sample-relative-path) | review-73ab176dc2e50d81 (4R, high) |
 | PR2 feat(plugin) | 25532c3 | feat(plugin): restore samples through relocatable references (branch feat/sample-relative-path-plugin; includes cross-shape `\`/`:` hardening, task 3.0) | review-13297fab4f346d9b (reliability, medium) |
 
-Uncommitted at archive (not part of 25532c3):
-- `openspec/changes/sample-relative-path/tasks.md`: 4.1–4.4 updates (the archived copy carries the final state).
-- `openspec/changes/sample-relative-path/verify-report.md`: untracked verify report.
-- This archive: `openspec/changes/archive/2026-11-14-sample-relative-path/` and the merged main specs `openspec/specs/sample-source/spec.md`, `openspec/specs/plugin-shell/spec.md`.
+Archive commit (not part of 25532c3): 1b4e1e4 `docs(openspec): archive sample-relative-path change` on feat/sample-relative-path-plugin. It holds this archive folder `openspec/changes/archive/2026-11-14-sample-relative-path/` (including the final `tasks.md` 4.1–4.4 state and `verify-report.md`), the merged main specs `openspec/specs/sample-source/spec.md` and `openspec/specs/plugin-shell/spec.md`, and the removal of the original `openspec/changes/sample-relative-path/`.
 
-No commit was made by the archive step. The orchestrator commits the archive on PR2's branch.
+No commit was made by the archive step itself; the orchestrator made commit 1b4e1e4.
 
 ## Review Gate
 
@@ -75,7 +72,7 @@ Post-merge check: no main spec still says "Absolute paths are used; relative-pat
 
 Copies in the archive folder keep the delta form of the two spec files, as the audit trail requires.
 
-## Verification Evidence (recorded at verify, not re-run during archive)
+## Verification Evidence (recorded at verify, plus post-verify manual checks 4.1–4.3; not re-run during archive)
 
 | Command or check | Result |
 |---|---|
@@ -129,13 +126,14 @@ Merged main specs (not moved): `openspec/specs/sample-source/spec.md`, `openspec
 5. macOS sandbox anchors are untested (development on Windows).
 6. Plugin glue (tasks 3.1–3.5) has no automated RED/GREEN coverage; it rests on code inspection, the build, and the manual checks.
 7. Manual coverage is partial: 4.1b, 4.2b, 4.3b remain open (see Follow-ups).
-8. The R-SS-14 deviation at SampleLoader.cpp:86 (non-empty samplePath with an empty candidate list shows "No sample") is practically unreachable on a real machine (verify WARNING 4).
+8. Fixed: the R-SS-14 deviation at SampleLoader.cpp:86 (non-empty samplePath with an empty candidate list showed "No sample"; verify WARNING 4) was fixed in the follow-up commit after 1b4e1e4. "No sample" is now shown only for an empty stored samplePath; otherwise the label is "Missing: <name>".
+9. Fixed: spec wording gaps in `openspec/specs/sample-source/spec.md` (empty-list rule, POSIX-only backslash normalisation, stored-value hardening rules and scenarios, search directories as the four non-recursive anchor directories, lowercase anchor keys, explicit "No sample" vs "Missing" label rule) were addressed in the same follow-up commit after 1b4e1e4.
 
 ## Follow-ups (not implemented)
 
 | ID | Item | Tracking |
 |---|---|---|
-| 1 | `SampleLoader.cpp:86`: "No sample" vs "Missing: name" for non-empty samplePath with an empty candidate list. Distinguish "samplePath empty" from "list empty". | next change |
+| 1 | `SampleLoader.cpp:86`: "No sample" vs "Missing: name" for non-empty samplePath with an empty candidate list. Distinguish "samplePath empty" from "list empty". | fixed in the follow-up commit after 1b4e1e4 (with the matching spec wording fixes) |
 | 2 | Resolver readability suggestions: dead UNC guard at `SamplePathResolver.cpp:35`; shared separator helper; test helper `refWith`; task-number banners in tests. | next change |
 | 3 | Unexercised manual items 4.1b (outside-anchor two fields; old-format restore label), 4.2b (moved parent folder; stored-vs-derived name in Missing label; nested-subfolder non-recursion), 4.3b (superseded restore interactively). | manual session |
 | 4 | Drop `samplePath` from state for privacy. | roadmap |
@@ -150,9 +148,9 @@ Merged main specs (not moved): `openspec/specs/sample-source/spec.md`, `openspec
 ## Risks
 
 1. The archive is an intentional archive with warnings. CRITICAL issues: none. Warnings carried: manual items 4.1b, 4.2b, 4.3b remain open; the SampleLoader.cpp:86 deviation; the TDD evidence and plugin-glue RED warnings from verify.
-2. The original change folder `openspec/changes/sample-relative-path/` could not be deleted by this executor (no shell or delete tool). Originals that must be deleted: `openspec/changes/sample-relative-path/` (`explore.md`, `proposal.md`, `design.md`, `tasks.md`, `verify-report.md`, `specs/sample-source/spec.md`, `specs/plugin-shell/spec.md`). Deleting the folder completes the move. Recommended: `git mv` for the tracked files, and a plain delete for the untracked `verify-report.md`, after the orchestrator checks the copies.
+2. Resolved: the archive executor could not delete the original change folder (no shell or delete tool). The orchestrator then verified the copies (five files identical ignoring CR; `tasks.md` and `verify-report.md` differ only by the planned edits), removed the original `openspec/changes/sample-relative-path/`, and committed the archive as 1b4e1e4 on feat/sample-relative-path-plugin.
 3. Archived file copies were written with the Write tool, not a byte copy. Line endings in the copies may differ from the originals (CRLF vs LF). Content is identical except the deliberate edits to `tasks.md` (4.1–4.4) and `verify-report.md` (status note and addendum). Main specs were edited in place with the Edit tool, which preserved their line endings.
-4. `openspec/changes/sample-relative-path/tasks.md` (modified) and `verify-report.md` (untracked) remain in the repository until the originals are deleted. Stage the archive, the merged main specs, and the deletion together. Do not fold the archive into commit 25532c3.
+4. Resolved: the original `tasks.md` (modified) and `verify-report.md` (untracked) were removed with the original folder; the archive, the merged main specs, and the deletion were committed together as 1b4e1e4, separate from 25532c3.
 5. The unchecked sub-items 4.1b, 4.2b, 4.3b may trip a naive checkbox scan of the archived tasks. They are deliberate (see Task Completion Gate).
 6. The archive did not run `gentle-ai review validate`, `gentle-ai sdd-status`, or git status (no shell). The `reviewGate: allow` result is the orchestrator's native output. The receipts on disk were read and match it. The live Git tree was not recomputed. Any scope check on the final commit must account for `openspec/specs/` and `openspec/changes/archive/`, which are outside the reviewed code path set.
 7. The phrase check across main specs was done only for the two specs edited; the other five main specs were not content-searched (no grep tool).
