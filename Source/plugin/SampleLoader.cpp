@@ -33,7 +33,11 @@ void SampleLoader::stop()
     alive_->store(false);
     signalThreadShouldExit();
     notify();
-    stopThread(4000);
+    // No timeout, as in juce::Thread::~Thread: on timeout JUCE kills the thread by force, possibly
+    // while it holds the gate mutex or the heap lock, just before gate_ and exchange_ are destroyed.
+    // A read stalled on a network share can delay shutdown but never corrupt it. Cannot deadlock:
+    // the loader never waits on the message thread (post() only queues callAsync) and we hold no lock.
+    stopThread(-1);
 }
 
 void SampleLoader::run()

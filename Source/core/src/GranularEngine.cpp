@@ -9,14 +9,21 @@ namespace grains {
 namespace {
 constexpr double kPi = 3.14159265358979323846;
 
-float finalize(float y) noexcept
-{
-    // Written so that NaN also takes the flush branch.
-    if (!(std::fabs(y) >= GranularEngine::kFlushThreshold)) return 0.0f;
-    return y > GranularEngine::kOutputCeiling ? GranularEngine::kOutputCeiling
-                                              : (y < -GranularEngine::kOutputCeiling ? -GranularEngine::kOutputCeiling : y);
-}
 } // namespace
+
+float GranularEngine::softLimit(float y) noexcept
+{
+    const float mag = std::fabs(y);
+    // Written so that NaN also takes the flush branch. Exact zero is returned as is (R-GR-10:
+    // x == 0 is transparent bit-exactly, so -0 keeps its sign); everything else flushes to +0.
+    if (!(mag >= kFlushThreshold)) return y == 0.0f ? y : 0.0f;
+    const float a = std::min(mag, kLimiterPreClamp); // +-inf, FLT_MAX -> pre-clamp
+    if (a <= kLimiterKnee) return y;                 // transparent, bit-exact
+    // C - s^2 / ((a - T) + s) is a chain of single monotone IEEE operations (no FMA candidate), so
+    // the result is monotone in float; max() removes a possible 1-ulp dip just above the knee.
+    const float m = std::max(kLimiterKnee, kOutputCeiling - kLimiterSpanSq / ((a - kLimiterKnee) + kLimiterSpan));
+    return y < 0.0f ? -m : m;
+}
 
 void GranularEngine::prepare(double sampleRate, std::uint64_t seed) noexcept
 {
@@ -55,8 +62,8 @@ void GranularEngine::process(float* left, float* right, int n) noexcept
     renderSegment(left, right, cursor, n - cursor);
 
     for (int i = 0; i < n; ++i) {
-        left[i] = finalize(left[i]);
-        right[i] = finalize(right[i]);
+        left[i] = softLimit(left[i]);
+        right[i] = softLimit(right[i]);
     }
 }
 

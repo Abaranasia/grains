@@ -78,7 +78,7 @@ TEST_CASE("engine_extremes: parameter grid stays finite and within the ceiling",
                     e.setParams(p);
                     const Out o = render(e, 12000, 1000); // 0.25 s: the 128-grain pool saturates after ~0.13 s at density 1000
                     REQUIRE(allFinite(o));
-                    REQUIRE(peak(o) <= kCeiling);
+                    REQUIRE(peak(o) < kCeiling);
                     REQUIRE(noSubnormals(o));
                     if (density == 0.0f) REQUIRE(allZero(o));
                     ++combos;
@@ -197,7 +197,7 @@ TEST_CASE("engine_extremes: 1 s of raw worst-case values stays finite and bounde
             e.setParams(p);
             const Out o = render(e, 48000, 1000);
             REQUIRE(allFinite(o));
-            REQUIRE(peak(o) <= kCeiling);
+            REQUIRE(peak(o) < kCeiling);
             REQUIRE(noSubnormals(o));
             CHECK_FALSE(allZero(o));
             ++combos;
@@ -222,7 +222,7 @@ TEST_CASE("engine_extremes: sample rates 22.05 kHz to 192 kHz stay finite and bo
         e.setParams(p);
         const Out o = render(e, static_cast<int>(sr / 2.0), 777); // 0.5 s
         REQUIRE(allFinite(o));
-        CHECK(peak(o) <= kCeiling);
+        CHECK(peak(o) < kCeiling);
         CHECK(peak(o) > 0.01f); // grains actually sounded at every rate
     }
 }
@@ -258,11 +258,10 @@ TEST_CASE("engine_extremes: sub-threshold and subnormal sources never yield deno
     }
 }
 
-// Coherent DC through a saturated pool is the worst case for the output ceiling: every grain adds
-// the same polarity, and a constant-1 source makes the window weight the only variation. The
-// output is linear in `gain` until the clamp engages, so the pre-clamp peak is measured at gain
-// 0.25 (well below the ceiling) and scaled by 8 (an exact power of two).
-TEST_CASE("engine_extremes: worst-case coherent DC engages the ceiling clamp but never exceeds it", "[engine_extremes]")
+// Coherent DC through a saturated pool is the worst case for the ceiling. Below the knee the
+// limiter is the identity, so the pre-limit peak is measured at gain 2/32 (about 0.29) and scaled
+// by 32, an exact power of two. The gain-2 output must then equal softLimit(pre-limit peak).
+TEST_CASE("engine_extremes: worst-case coherent DC saturates softly below the ceiling", "[engine_extremes]")
 {
     const SampleBuffer dc(std::vector<float>(200000, 1.0f), {}, 48000.0);
     auto run = [&](float gain) {
@@ -278,21 +277,15 @@ TEST_CASE("engine_extremes: worst-case coherent DC engages the ceiling clamp but
         return render(e, 48000 * 3, 480);
     };
 
-    const Out probe = run(0.25f);
-    const double preClampPeak = static_cast<double>(peak(probe)) * 8.0; // what gain 2 would produce without the clamp
-    REQUIRE(peak(probe) < kCeiling);                                   // the probe itself is unclamped
-    CHECK(preClampPeak > 9.0);   // measured 9.28: the clamp does engage for coherent material at gain 2
-    CHECK(preClampPeak < 9.6);
+    const Out probe = run(2.0f / 32.0f);
+    REQUIRE(peak(probe) <= GranularEngine::kLimiterKnee); // the probe itself is below the knee, so unlimited
+    const double preLimitPeak = static_cast<double>(peak(probe)) * 32.0;
+    CHECK(preLimitPeak > 9.0); // measured 9.28: the limiter does engage for coherent material at gain 2
+    CHECK(preLimitPeak < 9.6);
 
     const Out full = run(2.0f);
     REQUIRE(allFinite(full));
-    CHECK(peak(full) == kCeiling); // clipped exactly at the ceiling, never above
-    int clipped = 0;
-    for (float v : full.L)
-        if (std::abs(v) == kCeiling) ++clipped;
-    CHECK(clipped > 0);
-
-    // Gain 1 (default) with this material is also above the ceiling (about 4.64), gain 0.5 is not.
-    CHECK(preClampPeak / 2.0 > kCeiling);
-    CHECK(preClampPeak / 4.0 < kCeiling);
+    CHECK(peak(full) < kCeiling);
+    CHECK(peak(full) > 0.95f); // about 0.9954: saturated, not silent or attenuated
+    CHECK(peak(full) == GranularEngine::softLimit(static_cast<float>(preLimitPeak)));
 }

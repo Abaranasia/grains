@@ -129,7 +129,7 @@ TEST_CASE("engine_bounds: tiny sources are silent or sound exactly where the fal
         e.setParams(p);
         const Out o = render(e, 4800, 128);
         REQUIRE(allFinite(o));
-        CHECK(grains_test::peak(o) <= 4.0f);
+        CHECK(grains_test::peak(o) < GranularEngine::kOutputCeiling);
         if (c.sounds) {
             // 0.8 * w(0.5) * cos(pi/4); grains are 2 samples long so they never overlap at 48 samples spacing.
             CHECK(std::abs(static_cast<double>(grains_test::peak(o)) - 0.8 * std::cos(kPi / 4.0)) <= 1e-4);
@@ -249,7 +249,7 @@ TEST_CASE("engine_bounds: pan spread 0 centres a mono source, spread 1 does not"
 
 TEST_CASE("engine_bounds: output ceiling and denormal flush", "[engine_bounds]")
 {
-    // Loud source at maximum gain/density/size stays inside +-4.
+    // Loud source at maximum gain/density/size saturates softly: strictly inside the ceiling.
     const SampleBuffer loud(std::vector<float>(8000, 1.0f), {}, 48000.0);
     GranularEngine e;
     e.prepare(48000.0, 2);
@@ -261,7 +261,9 @@ TEST_CASE("engine_bounds: output ceiling and denormal flush", "[engine_bounds]")
     e.setParams(p);
     const Out o = render(e, 48000, 480);
     REQUIRE(allFinite(o));
-    for (float v : o.L) REQUIRE(std::abs(v) <= 4.0f);
+    for (float v : o.L) REQUIRE(std::abs(v) < GranularEngine::kOutputCeiling);
+    // About 128 in-phase grains sum to roughly 5.5 before the limiter, which maps to about 0.99.
+    CHECK(grains_test::peak(o) > 0.95f);
 
     // A source far below the flush threshold produces exact zeros, never denormals.
     const SampleBuffer tiny(std::vector<float>(4000, 1e-30f), {}, 48000.0);

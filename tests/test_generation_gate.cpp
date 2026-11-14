@@ -58,24 +58,30 @@ TEST_CASE("gate: next() cannot complete while a commit callback is running", "[g
 }
 
 // R-SS-11: bounded stress. The callback must never observe a generation other than the one it was
-// admitted under. The number of commits is scheduling dependent and deliberately not asserted.
+// admitted under. Bumping starts only after a first commit (10 s deadline), so the test cannot pass
+// without committing.
 TEST_CASE("gate: a committed callback always sees its own generation under contention", "[gate][stress]")
 {
     grains::GenerationGate g;
     constexpr int kBumps = 100000;
     std::atomic<bool> done{false};
     int mismatches = 0;
+    std::atomic<int> commits{0};
     std::thread committer([&] {
         while (!done.load()) {
             const auto gen = g.current();
-            g.commitIf(gen, [&]() noexcept {
-                if (g.current() != gen) ++mismatches;
-            });
+            if (g.commitIf(gen, [&]() noexcept {
+                    if (g.current() != gen) ++mismatches;
+                }))
+                commits.fetch_add(1);
         }
     });
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (commits.load() == 0 && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
     for (int i = 0; i < kBumps; ++i) g.next();
     done = true;
     committer.join();
+    CHECK(commits.load() > 0); // never REQUIRE before join: a throw with a joinable thread terminates
     CHECK(mismatches == 0);
     CHECK(g.current() == static_cast<std::uint64_t>(kBumps));
     CHECK(g.commitIf(g.current(), []() noexcept {}));

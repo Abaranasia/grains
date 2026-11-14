@@ -3,7 +3,6 @@
 
 #include <grains/SampleBuilder.h>
 
-#include <cmath>
 #include <cstddef>
 #include <limits>
 #include <vector>
@@ -111,4 +110,18 @@ TEST_CASE("builder: invalid input is rejected without throwing", "[builder]")
         CHECK(r.error == c.expected);
         CHECK_FALSE(r.truncated);
     }
+}
+
+TEST_CASE("builder: maxSourceFrames floors, rejects sub-frame caps and clamps to INT_MAX", "[builder]")
+{
+    constexpr auto kIntMax = static_cast<std::size_t>(std::numeric_limits<int>::max());
+    CHECK(grains::maxSourceFrames(10.0013) == 3000); // 3000.39 floors
+    CHECK(grains::maxSourceFrames(0.003) == 0);      // 0.9 floors to zero (rate < 1/300)
+    CHECK(grains::maxSourceFrames(1e8) == kIntMax);  // 3e10 clamps
+    CHECK(grains::maxSourceFrames(std::numeric_limits<double>::max()) == kIntMax); // product is +inf
+    const auto a = ramp(10, 0.0f);
+    const ChannelView v[] = {{a.data(), a.size()}};
+    const auto r = buildSampleBuffer(v, 1, 0.003);
+    CHECK(r.buffer == nullptr);
+    CHECK(r.error == BuildError::BadSampleRate);
 }

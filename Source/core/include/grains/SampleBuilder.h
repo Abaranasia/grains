@@ -8,6 +8,9 @@
 
 namespace grains {
 
+// Longest source kept. 300 s of 48 kHz stereo float is about 115 MB (peak about twice that while the
+// decode buffer and the builder's copy coexist), and it keeps frame counts far below
+// juce::AudioBuffer's INT_MAX limit. maxSourceFrames still clamps to INT_MAX for extreme rates.
 inline constexpr double kMaxSourceSeconds = 300.0;
 
 // Non-owning view of one decoded channel.

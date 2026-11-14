@@ -35,7 +35,7 @@ public:
     void request(const juce::String& path, Origin origin);
     std::uint64_t latestGeneration() const noexcept { return gate_.current(); }
 
-    // Message thread only. Idempotent; call before the exchange is destroyed.
+    // Message thread only. Idempotent; blocks until the loader thread exits. Call before the exchange is destroyed.
     void stop();
 
 private:
