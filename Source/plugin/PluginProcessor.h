@@ -46,7 +46,7 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
     // Message thread.
-    void loadFile(const juce::File& file) { loader_.request(file.getFullPathName(), SampleLoader::Origin::User); }
+    void loadFile(const juce::File& file);
     const juce::String& status() const noexcept { return status_; }
     juce::ChangeBroadcaster& statusBroadcaster() noexcept { return broadcaster_; }
 

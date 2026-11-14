@@ -362,6 +362,46 @@ TEST_CASE("sample_path: candidates ignore an unsafe name or relative path", "[sa
     CHECK(Res::candidates(r, {}, {R"(E:\a)"}) == Paths{R"(C:\old\kick.wav)", R"(E:\a\kick.wav)"});
 }
 
+// 3.0 cross-shape separators --------------------------------------------------------------------
+
+TEST_CASE("sample_path: a POSIX name with backslashes never escapes a Windows search directory", "[sample_path]")
+{
+    SampleRef r;
+    r.absolute = "/old/x.wav";
+    r.name = R"(..\..\x.wav)"; // one legal POSIX file name
+    const Paths got = Res::candidates(r, {}, {R"(E:\a)", "/m"});
+    CHECK(got == Paths{"/old/x.wav", R"(/m/..\..\x.wav)"});
+}
+
+TEST_CASE("sample_path: a POSIX relative path with backslashes never escapes a Windows anchor", "[sample_path]")
+{
+    SampleRef r;
+    r.absolute = "/old/x.wav";
+    r.name = "x.wav";
+    r.anchorKey = "music";
+    r.relative = R"(a\..\..\x)";
+    CHECK(Res::candidates(r, {{"music", R"(D:\Music)"}}, {}) == Paths{"/old/x.wav"});
+    CHECK(Res::candidates(r, {{"music", R"(\\srv\share)"}}, {}) == Paths{"/old/x.wav"});
+    CHECK(Res::candidates(r, {{"music", "/home/b"}}, {}) == Paths{R"(/home/b/a\..\..\x)", "/old/x.wav"});
+}
+
+TEST_CASE("sample_path: a colon in a name or relative part is skipped on Windows targets only", "[sample_path]")
+{
+    SampleRef posix;
+    posix.absolute = "/old/a:b.wav";
+    posix.name = "a:b.wav";
+    CHECK(Res::candidates(posix, {}, {R"(E:\a)", "/m"}) == Paths{"/old/a:b.wav", "/m/a:b.wav"});
+
+    SampleRef win;
+    win.absolute = R"(C:\old\kick:stream.wav)";
+    win.name = "kick:stream.wav";
+    CHECK(Res::candidates(win, {}, {R"(E:\a)"}) == Paths{R"(C:\old\kick:stream.wav)"});
+
+    SampleRef rel = anchoredRef();
+    rel.relative = "a:b/kick.wav";
+    CHECK(Res::candidates(rel, {{"music", R"(D:\Music)"}}, {}) == Paths{R"(C:\old\kick.wav)"});
+}
+
 // 2.9 resolve -----------------------------------------------------------------------------------
 
 TEST_CASE("sample_path: resolve returns the first existing candidate and stops there", "[sample_path]")

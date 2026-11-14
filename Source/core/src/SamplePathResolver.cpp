@@ -166,6 +166,14 @@ std::string join(const std::string& dir, const std::string& tail)
     return out;
 }
 
+// A Windows target treats '\' as a separator and ':' as a drive or NTFS stream marker, so a tail
+// carrying either (legal inside a POSIX name) could escape the directory there.
+bool safeTail(const std::string& dir, const std::string& tail) noexcept
+{
+    if (!SamplePathResolver::isWindowsShaped(dir)) return true;
+    return tail.find_first_of("\\:") == std::string::npos;
+}
+
 } // namespace
 
 SampleRef SamplePathResolver::restoreRef(std::string absolute, std::string name, std::string anchorKey,
@@ -206,7 +214,7 @@ std::vector<std::string> SamplePathResolver::candidates(const SampleRef& ref, co
     if (!ref.anchorKey.empty() && validRelative(ref.relative, posix)) {
         for (const PathAnchor& a : anchors) {
             if (a.key == ref.anchorKey && isAbsolute(a.dir)) {
-                add(join(a.dir, ref.relative));
+                if (safeTail(a.dir, ref.relative)) add(join(a.dir, ref.relative));
                 break;
             }
         }
@@ -216,7 +224,7 @@ std::vector<std::string> SamplePathResolver::candidates(const SampleRef& ref, co
     const std::string name = validName(ref.name, posix) ? ref.name : fileName(ref.absolute);
     if (validName(name, posix)) {
         for (const std::string& dir : searchDirs) {
-            if (isAbsolute(dir)) add(join(dir, name));
+            if (isAbsolute(dir) && safeTail(dir, name)) add(join(dir, name));
         }
     }
     return out;

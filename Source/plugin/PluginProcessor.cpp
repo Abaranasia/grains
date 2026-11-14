@@ -3,11 +3,40 @@
 
 #include "PluginEditor.h"
 
+#include <grains/SamplePathResolver.h>
+
 #include <algorithm>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 namespace pm = grains::params;
 const juce::Identifier kSamplePath{"samplePath"};
+const juce::Identifier kSampleName{"sampleName"};
+const juce::Identifier kSampleAnchor{"sampleAnchor"};
+const juce::Identifier kSampleRel{"sampleRel"};
+
+// Well-known user folders, in priority order. Keys are stable across machines; empty ones are skipped.
+std::vector<grains::PathAnchor> localAnchors()
+{
+    using SL = juce::File::SpecialLocationType;
+    const std::pair<const char*, SL> locations[] = {{"music", SL::userMusicDirectory},
+                                                    {"documents", SL::userDocumentsDirectory},
+                                                    {"desktop", SL::userDesktopDirectory},
+                                                    {"home", SL::userHomeDirectory}};
+    std::vector<grains::PathAnchor> out;
+    for (const auto& [key, location] : locations) {
+        const auto dir = juce::File::getSpecialLocation(location).getFullPathName();
+        if (dir.isNotEmpty()) out.push_back({key, dir.toStdString()});
+    }
+    return out;
+}
+
+juce::String prop(const juce::ValueTree& tree, const juce::Identifier& id)
+{
+    return tree.getProperty(id).toString();
+}
 } // namespace
 
 GrainsAudioProcessor::GrainsAudioProcessor()
@@ -99,16 +128,42 @@ void GrainsAudioProcessor::setStateInformation(const void* data, int sizeInBytes
         if (xml->hasTagName(apvts_.state.getType()))
         {
             apvts_.replaceState(juce::ValueTree::fromXml(*xml));
-            loader_.request(apvts_.state.getProperty(kSamplePath).toString(), SampleLoader::Origin::Restore);
+            const auto ref = grains::SamplePathResolver::restoreRef(
+                prop(apvts_.state, kSamplePath).toStdString(), prop(apvts_.state, kSampleName).toStdString(),
+                prop(apvts_.state, kSampleAnchor).toStdString(), prop(apvts_.state, kSampleRel).toStdString());
+            const auto anchors = localAnchors();
+            std::vector<std::string> searchDirs; // name search: directly inside each anchor, not recursive
+            for (const auto& a : anchors) searchDirs.push_back(a.dir);
+            juce::StringArray list;
+            for (const auto& c : grains::SamplePathResolver::candidates(ref, anchors, searchDirs))
+                list.add(juce::String::fromUTF8(c.c_str()));
+            loader_.request(list, juce::String::fromUTF8(ref.absolute.c_str()), juce::String::fromUTF8(ref.name.c_str()),
+                            SampleLoader::Origin::Restore);
         }
+}
+
+void GrainsAudioProcessor::loadFile(const juce::File& file)
+{
+    const auto path = file.getFullPathName();
+    loader_.request(juce::StringArray{path}, path, file.getFileName(), SampleLoader::Origin::User);
 }
 
 void GrainsAudioProcessor::onLoadResult(const SampleLoader::Result& r)
 {
     if (r.generation < loader_.latestGeneration()) return; // superseded by a newer request
     status_ = r.text;
-    if (r.loaded && r.origin == SampleLoader::Origin::User)
+    if (r.loaded && r.origin == SampleLoader::Origin::User) {
+        const auto ref = grains::SamplePathResolver::makeRef(r.path.toStdString(), localAnchors());
         apvts_.state.setProperty(kSamplePath, r.path, nullptr);
+        apvts_.state.setProperty(kSampleName, juce::String::fromUTF8(ref.name.c_str()), nullptr);
+        if (ref.anchorKey.empty()) {
+            apvts_.state.removeProperty(kSampleAnchor, nullptr);
+            apvts_.state.removeProperty(kSampleRel, nullptr);
+        } else {
+            apvts_.state.setProperty(kSampleAnchor, juce::String::fromUTF8(ref.anchorKey.c_str()), nullptr);
+            apvts_.state.setProperty(kSampleRel, juce::String::fromUTF8(ref.relative.c_str()), nullptr);
+        }
+    }
     broadcaster_.sendChangeMessage();
 }
 

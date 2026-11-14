@@ -2,11 +2,14 @@
 #include "SampleLoader.h"
 
 #include <grains/SampleBuilder.h>
+#include <grains/SamplePathResolver.h>
 
 #include <juce_events/juce_events.h>
 
 #include <algorithm>
 #include <new>
+#include <string>
+#include <vector>
 
 namespace {
 constexpr juce::int64 kChunkFrames = 65536;
@@ -19,11 +22,14 @@ SampleLoader::SampleLoader(grains::SourceExchange<grains::SampleBuffer>& exchang
     startThread();
 }
 
-void SampleLoader::request(const juce::String& path, Origin origin)
+void SampleLoader::request(const juce::StringArray& candidates, const juce::String& original,
+                           const juce::String& displayName, Origin origin)
 {
+    Request req{candidates, original, displayName, origin, 0}; // copies are made before lock_ is taken
     {
         const juce::ScopedLock sl(lock_);
-        pending_ = Request{path, origin, gate_.next()}; // lock_ then gate mutex, never the reverse
+        req.generation = gate_.next(); // lock_ then gate mutex, never the reverse
+        pending_ = std::move(req);
     }
     notify();
 }
@@ -55,9 +61,10 @@ void SampleLoader::run()
     }
 }
 
-void SampleLoader::post(const Request& r, bool loaded, const juce::String& text)
+void SampleLoader::post(const Request& r, bool loaded, const juce::String& text, const juce::String& path,
+                        bool relocated)
 {
-    Result res{r.generation, r.origin, loaded, r.path, text};
+    Result res{r.generation, r.origin, loaded, path.isEmpty() ? r.original : path, text, relocated};
     juce::MessageManager::callAsync([this, alive = alive_, res = std::move(res)] {
         if (alive->load()) onResult_(res); // cleared by stop() on this same thread
     });
@@ -76,7 +83,7 @@ void SampleLoader::load(const Request& r)
 {
     const auto isCurrent = [&] { return !threadShouldExit() && gate_.current() == r.generation; };
 
-    if (r.path.isEmpty() && r.origin == Origin::Restore) {
+    if (r.candidates.isEmpty() && r.origin == Origin::Restore) {
         auto clear = exchange_.stageClear();
         if (!clear) { // Box allocation failed: keep the previous source
             if (isCurrent()) post(r, false, "Error: No sample");
@@ -86,9 +93,8 @@ void SampleLoader::load(const Request& r)
         return;
     }
 
-    const bool absolute = juce::File::isAbsolutePath(r.path);
-    const juce::File file = absolute ? juce::File(r.path) : juce::File::createFileWithoutCheckingPath(r.path);
-    const juce::String name = file.getFileName();
+    // Labels use the stored name until a candidate is found, then the found file's name.
+    juce::String name = r.displayName;
 
     // Restore failure clears the source ("Missing"); a user load failure keeps the previous one.
     const auto fail = [&] {
@@ -105,7 +111,17 @@ void SampleLoader::load(const Request& r)
         }
     };
 
-    if (!absolute || !file.existsAsFile()) return fail();
+    std::vector<std::string> list;
+    for (const auto& c : r.candidates) list.push_back(c.toStdString());
+    const auto hit = grains::SamplePathResolver::resolve(list, [](const std::string& p) {
+        const auto path = juce::String::fromUTF8(p.c_str());
+        return juce::File::isAbsolutePath(path) && juce::File(path).existsAsFile();
+    });
+    if (!hit) return fail();
+    const juce::String loadedPath = r.candidates[static_cast<int>(*hit)];
+    const juce::File file(loadedPath);
+    const bool relocated = !grains::SamplePathResolver::samePath(list[*hit], r.original.toStdString());
+    name = file.getFileName();
     post(r, false, "Loading: " + name);
 
     grains::BuildResult built;
@@ -147,5 +163,7 @@ void SampleLoader::load(const Request& r)
         return;
     }
     if (!commitGated(r, std::move(staged))) return; // superseded: the Box is freed here, not published
-    post(r, true, "Loaded: " + name + (truncated ? " (truncated to 5 min)" : ""));
+    post(r, true,
+         "Loaded: " + name + (relocated ? " (relocated)" : "") + (truncated ? " (truncated to 5 min)" : ""),
+         loadedPath, relocated);
 }

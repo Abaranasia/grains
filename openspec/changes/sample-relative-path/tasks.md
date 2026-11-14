@@ -45,20 +45,21 @@ Each group: write failing tests, run `ctest -R "sample_path"` (RED), implement i
 - [x] 2.8 RED/GREEN `candidates`: order anchor, absolute, search dirs; anchor join in each style; unknown key skipped; non-absolute `absolute`; dedup on case and separators; trailing-separator dedup (`E:\a\` vs `E:\a`, spec lines 114-117); cap exactly 10 with 20 dirs; legacy order.
 - [x] 2.9 RED/GREEN `resolve`: first true wins and stops early; all false gives `nullopt` with calls in order; empty list never calls predicate.
 - [x] 2.10 RED/GREEN garbage input: empty string, only separators, embedded NUL and control characters, very long path (e.g. 100k chars) through `makeRef`, `candidates`, `resolve`; no throw, empty path gives empty name, no anchor, empty list.
-- [ ] 2.11 REFACTOR: tidy helpers, run full `ctest --test-dir build -C Debug --output-on-failure` green; commit unit 1.
+- [x] 2.11 REFACTOR: tidy helpers, run full `ctest --test-dir build -C Debug --output-on-failure` green; commit unit 1. (committed as 960fec4)
 
 ## Phase 3: Plugin wiring (unit 2, manual-verified)
 
-- [ ] 3.1 `Source/plugin/SampleLoader.h/.cpp`: `request(StringArray candidates, String original, String displayName, Origin)`; build list before `lock_`, move into `pending_`; empty list with Restore clears ("No sample").
-- [ ] 3.2 `SampleLoader.cpp` load: `resolve` with `File::existsAsFile`; failure label `"Missing: " + displayName`; `Result{path, relocated}` using `samePath`; status `Loaded: <name>[ (relocated)][truncation]`.
-- [ ] 3.3 `Source/plugin/PluginProcessor.h/.cpp`: `localAnchors()` (music, documents, desktop, home; skip empty); `loadFile` calls `request({path}, path, name, User)`.
-- [ ] 3.4 `PluginProcessor.cpp` `onLoadResult`: after a User load write `samplePath`, `sampleName`, and `sampleAnchor`/`sampleRel` from `makeRef`; remove the anchor pair when no match; never rewrite on Restore.
-- [ ] 3.5 `PluginProcessor.cpp` `setStateInformation`: `restoreRef` from the four properties, `candidates` with anchors and search dirs, `request(list, absolute, name, Restore)`.
-- [ ] 3.6 Build `GrainsPlugin_Standalone` and run the full suite; existing tests unchanged.
+- [x] 3.0 Review follow-up (RED/GREEN): `candidates()` skips a relative/name part containing a backslash or colon when joining onto a Windows-shaped dir (legal in POSIX names; a backslash dot-dot chain would escape the dir). 3 tests in `tests/test_sample_path_resolver.cpp`; `safeTail` in `SamplePathResolver.cpp`.
+- [x] 3.1 `Source/plugin/SampleLoader.h/.cpp`: `request(StringArray candidates, String original, String displayName, Origin)`; build list before `lock_`, move into `pending_`; empty list with Restore clears ("No sample").
+- [x] 3.2 `SampleLoader.cpp` load: `resolve` with `File::existsAsFile`; failure label `"Missing: " + displayName`; `Result{path, relocated}` using `samePath`; status `Loaded: <name>[ (relocated)][truncation]`.
+- [x] 3.3 `Source/plugin/PluginProcessor.h/.cpp`: `localAnchors()` (music, documents, desktop, home; skip empty); `loadFile` calls `request({path}, path, name, User)`.
+- [x] 3.4 `PluginProcessor.cpp` `onLoadResult`: after a User load write `samplePath`, `sampleName`, and `sampleAnchor`/`sampleRel` from `makeRef`; remove the anchor pair when no match; never rewrite on Restore.
+- [x] 3.5 `PluginProcessor.cpp` `setStateInformation`: `restoreRef` from the four properties, `candidates` with anchors and search dirs, `request(list, absolute, name, Restore)`.
+- [x] 3.6 Build `GrainsPlugin_Standalone` and run the full suite; existing tests unchanged.
 
 ## Phase 4: Manual verification and spec sync (unit 2)
 
-- [ ] 4.1 Manual (Standalone, Debug): anchored file writes four fields; file outside anchors writes two; old-format state (only `samplePath`) restores without "(relocated)".
-- [ ] 4.2 Manual: move the sample's parent folder, restore; label `Loaded: <name> (relocated)`; missing file label `Missing: <name>` (stored name, else derived), state re-saved unchanged. Name search covers only files directly inside Music, Documents, Desktop or Home (non-recursive); a file in a nested subfolder not under the stored anchor path is NOT found.
-- [ ] 4.3 Manual: stray `sampleName` with empty `samplePath` gives silence and "No sample"; relocated restore does not rewrite state; superseded restore does not publish (R-SS-7 gate checks); relocated plus truncated label shows both.
-- [ ] 4.4 Sync deltas into `openspec/specs/sample-source/spec.md` and `openspec/specs/plugin-shell/spec.md` text at archive time; commit unit 2 as `feat(plugin): restore samples from relocated paths`.
+- [ ] 4.1 PENDING maintainer (interactive; Standalone builds and launches, state round-trip not exercised). Manual (Standalone, Debug): anchored file writes four fields; file outside anchors writes two; old-format state (only `samplePath`) restores without "(relocated)".
+- [ ] 4.2 PENDING maintainer (interactive). Manual: move the sample's parent folder, restore; label `Loaded: <name> (relocated)`; missing file label `Missing: <name>` (stored name, else derived), state re-saved unchanged. Name search covers only files directly inside Music, Documents, Desktop or Home (non-recursive); a file in a nested subfolder not under the stored anchor path is NOT found.
+- [ ] 4.3 PENDING maintainer (interactive). Manual: stray `sampleName` with empty `samplePath` gives silence and "No sample"; relocated restore does not rewrite state; superseded restore does not publish (R-SS-7 gate checks); relocated plus truncated label shows both.
+- [ ] 4.4 PENDING archive time (spec sync into `openspec/specs`; unit-2 commit is the maintainer's). Sync deltas into `openspec/specs/sample-source/spec.md` and `openspec/specs/plugin-shell/spec.md` text at archive time; commit unit 2 as `feat(plugin): restore samples from relocated paths`.
