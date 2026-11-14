@@ -42,11 +42,11 @@ Chain strategy: pending
 ## Phase 3: GREEN
 
 - [x] 3.1 `GranularEngine.cpp`: implement the curve `max(T, C - s^2 / ((a - T) + s))` with sign restore; set `kOutputCeiling = 1.0f` in the header.
-- [ ] 3.2 Run the full suite; confirm `test_engine_loudness.cpp` (within 3 dB, step slope) passes unchanged, then run the clang UBSan build. PENDING: local MSVC suite green (131/131, loudness unchanged); clang UBSan build not runnable on this Windows host (no clang), left for the CI linux-sanitizers job.
+- [x] 3.2 Run the full suite; confirm `test_engine_loudness.cpp` (within 3 dB, step slope) passes unchanged, then run the clang UBSan build. Local MSVC suite green (131/131, loudness unchanged); clang UBSan covered by the CI linux-sanitizers job, green on ad0351c (reported by the maintainer; not observed from this host).
 
 ## Phase 4: Refactor and docs
 
 - [x] 4.1 `GranularEngine.h` (CRLF): rewrite comment at lines 19-28 to describe `softLimit` and the coherent sum (about 9.3 at gain 2).
 - [x] 4.2 `README.md:31` (CRLF): replace "no limiter" with the soft 0 dBFS ceiling.
 - [x] 4.3 Resolve spec open questions: state the transparency range (0 and `kFlushThreshold` <= |x| <= T) in R-GR-10; delta or archive-time edit for `openspec/specs/sample-source/spec.md:262`.
-- [ ] 4.4 Manual: Standalone with heavy overlap, confirm never above 0 dBFS and quiet passages unchanged. Commit with `feat(core): soft-limit engine output to a 1.0 ceiling`. PENDING: manual Standalone check and commit are left to the user (plugin build is OFF locally; no commit made by apply).
+- [x] 4.4 Manual: Standalone with heavy overlap, confirm never above 0 dBFS and quiet passages unchanged. Commit with `feat(core): soft-limit engine output to a 1.0 ceiling`. Standalone (build/plugin-jf2, Debug) checked by the maintainer with heavy overlap (1000 ms, ~150 gr/s, gain 1.68); committed as ad0351c.

@@ -259,4 +259,4 @@ A JUCE-free core primitive (the generation gate) MUST own a request generation c
 - Then the allocation counter is unchanged across the call and no buffer is freed on the consumer thread
 
 ## Out of scope (explicit)
-Waveform display, custom parameter UI, recent files, relative-path lookup, embedded audio in state, load-time resampling, MIDI control, soft limiter.
+Waveform display, custom parameter UI, recent files, relative-path lookup, embedded audio in state, load-time resampling, MIDI control, lookahead limiting and any user-adjustable output ceiling or drive.
