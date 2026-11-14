@@ -41,6 +41,7 @@ add_executable(grains_tests
   test_engine_extremes.cpp
   test_engine_loudness.cpp
   test_engine_pool_full.cpp
+  test_soft_limiter.cpp
   test_param_spec.cpp
   test_source_exchange.cpp
   test_generation_gate.cpp

@@ -166,6 +166,29 @@ TEST_CASE("realtime: process() performs zero allocations with a full pool", "[re
     CHECK(e.activeGrainCount() == grains::GrainPool::kCapacity);
 }
 
+// R-GR-10: the limiter is stateless and allocation-free while it is actually engaged. A coherent DC
+// source at gain 2 drives the sum far above the knee, so the measured peak proves the non-linear
+// region ran inside the scope.
+TEST_CASE("realtime: process() performs zero allocations while the limiter is engaged", "[realtime][soft_limiter]")
+{
+    const SampleBuffer dc(std::vector<float>(200000, 1.0f), {}, kSr);
+    GranularEngine e;
+    e.prepare(kSr, 1);
+    e.setSource(&dc);
+    EngineParams p;
+    p.density = 200.0f;
+    p.grainSizeMs = 1000.0f;
+    p.position = 0.0f;
+    p.gain = 2.0f;
+    e.setParams(p);
+    std::vector<float> l(512), r(512);
+    for (int i = 0; i < 100; ++i) e.process(l.data(), r.data(), 512); // warm up outside the scope
+    const RunStats stats = allocationsWhileProcessing(e, 512, 100);
+    CHECK(stats.allocs == 0);
+    CHECK(stats.peak > GranularEngine::kLimiterKnee);
+    CHECK(stats.peak < GranularEngine::kOutputCeiling);
+}
+
 TEST_CASE("realtime: process() performs zero allocations at parameter extremes", "[realtime]")
 {
     const SampleBuffer src(grains_test::noise(48000, 9), grains_test::noise(48000, 10), kSr);
