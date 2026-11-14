@@ -1,7 +1,7 @@
 # Archive Report: soft-limiter
 
 **Archived**: 2026-11-14
-**Archive path**: `openspec/changes/archive/2026-11-14-soft-limiter/` (copied by the archive executor; the original `openspec/changes/soft-limiter/` must be deleted, see Risks)
+**Archive path**: `openspec/changes/archive/2026-11-14-soft-limiter/` (copied by the archive executor; the orchestrator verified the copies identical to the originals and removed `openspec/changes/soft-limiter/` in the archive commit bfae342)
 **Mode**: hybrid (openspec + engram `sdd/soft-limiter/*`)
 **Branch**: feat/soft-limiter (single PR, single commit, roadmap P1)
 **Verdict carried from verify**: PASS WITH WARNINGS (0 CRITICAL, 3 WARNING, 2 SUGGESTION)
@@ -12,13 +12,9 @@
 | Slice | Commit | Subject | Review lineage |
 |---|---|---|---|
 | feat(core) | ad0351c | feat(core): soft-limit engine output to a 1.0 ceiling (pushed on feat/soft-limiter) | review-7234f34a862850b9 (4R, high) |
+| docs(openspec) | bfae342 | docs(openspec): archive soft-limiter change (tasks.md 3.2/4.4 ticks, verify report, merged main specs, folder move) | review-2bad917fd7010cd4 (4R, high) |
 
-Uncommitted at archive (not part of ad0351c):
-- `openspec/changes/soft-limiter/tasks.md`: 3.2 and 4.4 checkbox ticks (the archived copy carries them).
-- `openspec/changes/soft-limiter/verify-report.md`: untracked verify report.
-- This archive: `openspec/changes/archive/2026-11-14-soft-limiter/` and the merged main specs.
-
-No commit was made by the archive step.
+The archive step itself made no commit; the orchestrator committed it as bfae342.
 
 ## Review Gate
 
@@ -144,8 +140,8 @@ Merged main specs (not moved): `openspec/specs/grain-rendering/spec.md`, `opensp
 ## Risks
 
 1. The archive is an intentional archive with warnings. CRITICAL issues: none. Warnings carried: UBSan CI is maintainer-reported, the manual dBFS check is subjective, and the dispatcher reports a remediation-state block that the receipt does not support.
-2. The original change folder `openspec/changes/soft-limiter/` could not be deleted by this executor (no shell or delete tool). Originals that must be deleted: `openspec/changes/soft-limiter/` (proposal.md, design.md, explore.md, tasks.md, verify-report.md, specs/grain-rendering/spec.md, specs/plugin-shell/spec.md, specs/sample-source/spec.md). Deleting the folder completes the move. The orchestrator used `git mv` for loader-hardening; the same is recommended here.
-3. Archived file copies were written with the Write tool. Line endings in the copies may differ from the originals. Content is identical. Main specs were edited in place with the Edit tool, which preserved their existing line endings.
-4. `openspec/changes/soft-limiter/tasks.md` (modified) and `verify-report.md` (untracked) are still in the repository until the originals are deleted. Stage the archive, the merged main specs, and the deletion together. Do not commit the archive together with the code commit ad0351c.
+2. Resolved: the archive executor could not delete the original change folder (no shell or delete tool). The orchestrator compared all 8 copies with the originals (identical ignoring CR) and removed `openspec/changes/soft-limiter/` in bfae342.
+3. Resolved: the copies were written with the Write tool; their content was verified identical to the originals, and git normalises line endings on commit. Main specs were edited in place and kept their line endings.
+4. Resolved: the tasks.md ticks, verify-report.md, the merged main specs and the folder move were committed together in bfae342, separately from the code commit ad0351c.
 5. Archive did not re-run `gentle-ai review validate`, `gentle-ai sdd-status`, or git status (no shell). The `reviewGate: allow` result is the orchestrator's native output; the receipts on disk were read and match it. The live Git tree was not recomputed. Any review-scope check on the final commit must account for `openspec/specs/` and `openspec/changes/archive/`, which are outside the reviewed code path set.
 6. Engram observation 605 (explore) and 612 (negative-zero fix) were cited from the orchestrator and the apply artifacts, not re-fetched by the archive executor. Engram `sdd/soft-limiter/tasks` #610 is stale relative to the file on disk (3.2 and 4.4 ticks).

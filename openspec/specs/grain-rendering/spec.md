@@ -174,7 +174,7 @@ Engine state (RNG, pool, accumulators, smoothing) MUST be per instance with no m
 The engine MUST pass every output sample, on both channels, through a fixed soft limiter as the last stage of rendering. The limiter MUST be a pure per-sample function of the sample value alone, with no state, no memory between samples, no lookahead, and no latency, so that block-split invariance (R-GR-6) is preserved. It MUST be exposed as a static function so it can be tested directly. It is parameterised by a ceiling C = 1.0 and a knee threshold T, a documented constant with 0.7 <= T <= 0.9 (nominal 0.8). For input x the limiter output y MUST satisfy:
 
 - Ceiling: |y| < C strictly, for every finite x and for non-finite x (see out-of-domain handling below).
-- Flush: NaN and any input with |x| < 1e-20 (the flush threshold, which includes every subnormal) MUST map to 0 before the curve is applied.
+- Flush: NaN and any nonzero input with |x| < 1e-20 (the flush threshold, which includes every subnormal) MUST map to +0 before the curve is applied. Exact zero of either sign is not flushed; it is covered by Transparency, so -0 stays -0.
 - Transparency: for x == 0 and for 1e-20 <= |x| <= T, y == x bit-exactly.
 - Monotonicity: y is monotone non-decreasing in x.
 - Symmetry: y(-x) == -y(x).
@@ -198,7 +198,7 @@ The limiter MUST NOT allocate, lock, throw, or block, and MUST NOT introduce lat
 #### Scenario: Curve properties over a sweep [Catch2]
 - Given a dense sweep of inputs across [-64, 64] (excluding the flushed region |x| < 1e-20, where the output is 0), including values immediately around +/-T and +/-1
 - When passed through the limiter
-- Then outputs are monotone non-decreasing, satisfy y(-x) == -y(x), stay strictly within (-1, 1), have no jump between adjacent samples larger than the sweep step (slope <= 1 within numeric tolerance), and approach C as |x| grows
+- Then outputs are monotone non-decreasing, satisfy y(-x) == -y(x), stay strictly within (-1, 1), have no jump between adjacent samples larger than the sweep step (slope <= 1 within numeric tolerance), and rise towards C as |x| grows (above an implementation pre-clamp magnitude, 64, the output stays constant just below C, about 0.9994)
 
 #### Scenario: Out-of-domain inputs [Catch2]
 - Given inputs NaN, +inf, -inf, +/-FLT_MAX, and subnormal values of both signs
