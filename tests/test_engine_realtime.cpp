@@ -98,10 +98,21 @@ TEST_CASE("realtime: the allocation counter sees allocations inside its scope on
     CHECK(aligned >= 1);
 }
 
+namespace {
+// Writing to and reading back a volatile makes the pointer escape, so the compiler cannot elide
+// the new/delete pair (allowed since C++14) and the free counter really sees the delete.
+int* volatile g_sink = nullptr;
+int* escape(int* p) noexcept
+{
+    g_sink = p;
+    return g_sink;
+}
+} // namespace
+
 // The free counter ignores null deletes and frees outside a scope (R-SS-3).
 TEST_CASE("realtime: the allocation counter counts non-null frees inside its scope only", "[realtime]")
 {
-    auto* outside = new int(1);
+    auto* outside = escape(new int(1));
     std::size_t frees = 99;
     {
         AllocationScope scope;
@@ -111,7 +122,7 @@ TEST_CASE("realtime: the allocation counter counts non-null frees inside its sco
         frees = scope.frees();
     }
     CHECK(frees == 1);
-    auto* q = new int(2);
+    auto* q = escape(new int(2));
     {
         AllocationScope scope;
         CHECK(scope.frees() == 0);
