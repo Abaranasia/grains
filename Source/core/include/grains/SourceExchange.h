@@ -13,6 +13,8 @@ namespace grains {
 //
 // Producer: publish(next) or stage(next) + commit(staged); then collect(). collect MUST follow every
 //           accepted publish/commit (a commit the caller rejected changes nothing, so needs none).
+//           The type does not enforce this. In the plugin, SampleLoader::commitGated does: it
+//           collects after every accepted commit, and run() also collects on every tick.
 // Consumer: acquire() once per block; call engine.setSource(r.source) whenever r.changed.
 //
 // The consumer keeps the adopted Box in current_. Adopting a newer Box moves the old one into the
