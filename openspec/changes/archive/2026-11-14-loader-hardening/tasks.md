@@ -45,7 +45,7 @@ Rollback boundary: `Source/plugin/SampleLoader.cpp`, `Source/plugin/SampleLoader
 - [x] 1.7 Build core (OFF) and run ctest, expect 122/122; build plugin (ON) target `grains_plugin`, expect success. (R-SS-7)
 - [ ] 1.8 [Manual] W2 stalled-read shutdown (user-performed, may remain pending): load a sample from a stalled or slow network share, close the host mid-read; expect shutdown to wait for the loader and no "killing thread by force" message in the JUCE debug output. (R-SS-7)
 - [ ] 1.9 [Manual] W-A failed clear (user-performed, may remain pending): trigger a clear whose allocation fails (or simulate); expect the previous source to remain and the label "Error: No sample" (or "Error: <name>" when loading a named file). (R-SS-9)
-- [ ] 1.10 (pending orchestrator) Commit (orchestrator): `fix(plugin): wait for loader thread at shutdown` covering `SampleLoader.cpp`, `SampleLoader.h`, and `openspec/changes/loader-hardening/`.
+- [x] 1.10 Commit (orchestrator) 3f8f65b: `fix(plugin): wait for the loader thread at shutdown instead of killing it` covering `SampleLoader.cpp`, `SampleLoader.h`, and `openspec/changes/loader-hardening/`.
 
 ## WU2: `test: harden stress, frees and cap tests`
 
@@ -59,7 +59,7 @@ Rollback boundary: `tests/test_generation_gate.cpp`, `tests/test_engine_realtime
 - [x] 2.6 S4: remove `#include <cmath>` at `test_sample_builder.cpp` L6 after confirming with `rg "std::(floor|ceil|round|sqrt|abs|sin|cos|pow|isnan|isinf)|fabs|floor\(" tests/test_sample_builder.cpp` that nothing else needs it (if something does, STOP and report). Build to confirm. (cleanup)
 - [x] 2.7 Full core build (plugin OFF) and ctest: expect baseline plus 1 new test case (123 tests if counted per case; record the exact count). (R-SS-5)
 - [x] 2.8 (N/A: no sanitizer configuration on MSVC; DBL_MAX path takes the clamp branch by design) Optional: UBSan check of the S2 case if a sanitizer configuration is available (DBL_MAX path must be clean because it takes the clamp branch). Record or mark N/A. (R-SS-5)
-- [ ] 2.9 (pending orchestrator) Commit (orchestrator): `test: harden stress, frees and cap tests`.
+- [x] 2.9 Commit (orchestrator) 415a457: `test: harden the gate stress, frees and source cap tests`.
 
 ## WU3: `docs(core): document cap rationale and collect rule`
 
@@ -68,7 +68,7 @@ Rollback boundary: comment-only edits in `Source/core/include/grains/SourceExcha
 - [x] 3.1 S3: in `SourceExchange.h` after L15 add the 2-line comment naming `SampleLoader::commitGated` (design text). Keep CRLF. (documentation)
 - [x] 3.2 S5: in `SampleBuilder.h` above `kMaxSourceSeconds` (L11) add the 4-line comment (115 MB, about 2x peak, INT_MAX; `maxSourceFrames` clamps). Keep CRLF. (R-SS-5 rationale)
 - [x] 3.3 Verify `git diff --numstat` shows only additions in both files and no whole-file rewrite; build core and run ctest, expect unchanged results from task 2.7. (documentation)
-- [ ] 3.4 (pending orchestrator) Commit (orchestrator): `docs(core): document cap rationale and collect rule`.
+- [x] 3.4 Commit (orchestrator) 5a732ee: `docs(core): document the source cap and where collect is enforced`.
 
 ## WU4: `build: single JUCE pin file and CI cache key`
 
@@ -85,13 +85,13 @@ Rollback boundary: `cmake/JucePin.cmake`, `CMakeLists.txt` JUCE block, `.github/
 - [x] 4.9 Verify the CI file by inspection: three jobs, every `uses:` still pinned to a 40-char SHA, `permissions: contents: read`, cache path `build-plugin/_deps` unchanged, only the key line differs in `git diff`. (R-BH-5)
 - [x] 4.10 Verify untouched paths: `git diff --stat -- Grains.jucer Builds JuceLibraryCode` is empty. (R-BH-3)
 - [ ] 4.11 [Manual] Single-source-of-truth scenario (user-performed, may remain pending): after push, change only a comment in `CMakeLists.txt` and confirm the CI cache key does not change; change the SHA in `cmake/JucePin.cmake` and confirm the key changes (one-time cache miss expected on the first run of this PR). (R-BH-5)
-- [ ] 4.12 (pending orchestrator) Commit (orchestrator): `build: single JUCE pin file and CI cache key`.
+- [x] 4.12 Commit (orchestrator) aade368: `build: keep the JUCE pin in one file and key the CI cache on it`.
 
 ## Final verification
 
 - [x] 5.1 From a fresh state: core configure, build Debug, `ctest --test-dir build -C Debug --output-on-failure`; expect all tests pass (baseline 122 plus the new S2 case). (all)
 - [x] 5.2 Plugin configure with `-DGRAINS_BUILD_PLUGIN=ON` into `build-plugin` and build `grains_plugin` Debug; expect success. (R-SS-7, R-BH-3)
-- [ ] 5.3 (pending orchestrator: needs commits; mutation leftovers check passed) `git status` clean apart from intended files; `git log --oneline -5` shows the four conventional commits with no AI attribution; no mutation leftovers (`rg "gen \+ 1" tests/test_generation_gate.cpp` empty). (all)
+- [x] 5.3 (verified in sdd-verify: tree clean, four conventional commits, no attribution, no `gen + 1` leftover) `git status` clean apart from intended files; `git log --oneline -5` shows the four conventional commits with no AI attribution; no mutation leftovers (`rg "gen \+ 1" tests/test_generation_gate.cpp` empty). (all)
 
 ## Post-push
 
