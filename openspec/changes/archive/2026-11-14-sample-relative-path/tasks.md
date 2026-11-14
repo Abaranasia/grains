@@ -59,7 +59,10 @@ Each group: write failing tests, run `ctest -R "sample_path"` (RED), implement i
 
 ## Phase 4: Manual verification and spec sync (unit 2)
 
-- [ ] 4.1 PENDING maintainer (interactive; Standalone builds and launches, state round-trip not exercised). Manual (Standalone, Debug): anchored file writes four fields; file outside anchors writes two; old-format state (only `samplePath`) restores without "(relocated)".
-- [ ] 4.2 PENDING maintainer (interactive). Manual: move the sample's parent folder, restore; label `Loaded: <name> (relocated)`; missing file label `Missing: <name>` (stored name, else derived), state re-saved unchanged. Name search covers only files directly inside Music, Documents, Desktop or Home (non-recursive); a file in a nested subfolder not under the stored anchor path is NOT found.
-- [ ] 4.3 PENDING maintainer (interactive). Manual: stray `sampleName` with empty `samplePath` gives silence and "No sample"; relocated restore does not rewrite state; superseded restore does not publish (R-SS-7 gate checks); relocated plus truncated label shows both.
-- [ ] 4.4 PENDING archive time (spec sync into `openspec/specs`; unit-2 commit is the maintainer's). Sync deltas into `openspec/specs/sample-source/spec.md` and `openspec/specs/plugin-shell/spec.md` text at archive time; commit unit 2 as `feat(plugin): restore samples from relocated paths`.
+- [x] 4.1 Maintainer saved a sample from inside an anchor folder and restored it in the Standalone; restore OK (2026-11-14). Scope: four saved fields not inspected.
+  - [ ] 4.1b not exercised in the Standalone: file outside anchors writes two fields; old-format state restores without (relocated) — covered only by the R-SS-13 legacy Catch2 test and code review.
+- [x] 4.2 Maintainer moved the file into another anchor folder and saw "(relocated)"; deleted it and saw "Missing: <name>" (2026-11-14). Scope: as stated.
+  - [ ] 4.2b not exercised: moved parent folder case, stored-vs-derived name in the Missing label, nested-subfolder non-recursion.
+- [x] 4.3 Orchestrator ran the Standalone (Debug, 25532c3) with crafted settings states and read the status label through UI Automation (2026-11-14). Stray fields with empty `samplePath` (and a real file at the anchored path): "No sample", nothing loaded. Relocated plus truncated: "Loaded: long.wav (relocated) (truncated to 5 min)". Saved `samplePath` unchanged after close (no rewrite on Restore).
+  - [ ] 4.3b superseded restore not exercised interactively; relies on test_generation_gate.cpp / test_source_exchange.cpp superseded cases and the unit-2 review's code inspection (lineage review-13297fab4f346d9b) that commitGated/GenerationGate were not modified.
+- [x] 4.4 Synced into openspec/specs at archive (2026-11-14): deltas merged into `openspec/specs/sample-source/spec.md` and `openspec/specs/plugin-shell/spec.md`. Unit-2 commit is 25532c3 (`feat(plugin): restore samples through relocatable references`).
