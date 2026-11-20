@@ -100,7 +100,7 @@ With identical source, parameters, seed, sample rate, and block partition, the e
 - Then outputs are bit-identical (or, if the design cannot guarantee that, within 1e-6 absolute)
 
 ### R-GR-7 Numeric safety and extremes
-For every valid or out-of-range parameter combination, output samples MUST be finite (no NaN, no Inf) and bounded by the documented ceiling C = 1.0: |y| < 1.0 strictly, enforced by the soft output limiter (R-GR-10). Parameters MUST be clamped to documented ranges, NaN inputs treated as defaults. Ranges (amended, user decision D2): density [0, 1000] gr/s (0 = no spawns), size [1 ms, 1000 ms] with a minimum grain length of 2 output samples, pitch [-24, +24] st, position [0, 1] of source length, position jitter [0, 1], pitch jitter [0, 12] st, pan spread [0, 1], gain [0, 2] linear. Denormals MUST NOT be produced in output when grains decay or the source is silent. Grain length in output samples MUST be derived from the engine sample rate only, and MUST NOT depend on the source's own sample rate. Numeric-safety checks MUST hold on both supported toolchains (MSVC and clang), including under UndefinedBehaviorSanitizer with float-cast-overflow checking enabled for the core and tests.
+For every valid or out-of-range parameter combination, output samples MUST be finite (no NaN, no Inf) and bounded by the documented ceiling C = 1.0: |y| < 1.0 strictly, enforced by the soft output limiter (R-GR-10). Parameters MUST be clamped to documented ranges, NaN inputs treated as defaults. Ranges (amended, user decision D2): density [0, 1000] gr/s (0 = no spawns), size [1 ms, 1000 ms] with a minimum grain length of 2 output samples, pitch [-24, +24] st, position [0, 1] of source length, position jitter [0, 1], pitch jitter [0, 12] st, pan spread [0, 1], gain [0, 2] linear. Denormals MUST NOT be produced in output when grains decay or the source is silent. Grain length in output samples MUST be derived from the engine sample rate only, and MUST NOT depend on the source's own sample rate. The per-grain read-rate compensation `srcSr / sampleRate_` MUST be kept for sources whose rate differs from the engine rate (for example while a reload is in flight), and MUST equal 1 (no change to read rate) when the source rate equals the engine rate. Numeric-safety checks MUST hold on both supported toolchains (MSVC and clang), including under UndefinedBehaviorSanitizer with float-cast-overflow checking enabled for the core and tests.
 
 #### Scenario: Extremes grid
 - Given size in {0, 1 sample, 2000 ms, 1e9 ms, NaN}, pitch in {-100, -24, 24, 100, NaN}, density in {0, 2000, 1e9}, position in {-1, 0, 1, 2}
@@ -133,6 +133,16 @@ For every valid or out-of-range parameter combination, output samples MUST be fi
 - When the grain length in output samples is computed or observed at spawn
 - Then it is 221, 441, 480, 960 and 1920 samples respectively
 - And the length is the same whether the source was authored at the engine rate or at a different rate
+
+#### Scenario: Mismatched source keeps pitch and duration [Catch2]
+- Given a 1 kHz sine source authored at 96000 Hz and an engine at 48000 Hz, pitch 0
+- When rendered
+- Then the dominant output frequency is 1 kHz within 1 percent, as for a source authored at 48000 Hz
+
+#### Scenario: Matched source rate is neutral [Catch2]
+- Given the same material authored at 48000 Hz and an engine at 48000 Hz
+- When rendered with a fixed seed
+- Then the output is bit-identical to the output before this change
 
 #### Scenario: Float-to-index casts are overflow-safe
 - Given size = 1e9 ms, position outside [0, 1], and extreme pitch/jitter values, run on the clang sanitizer build with float-cast-overflow enabled
