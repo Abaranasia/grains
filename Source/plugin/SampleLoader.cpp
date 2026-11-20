@@ -7,6 +7,7 @@
 #include <juce_events/juce_events.h>
 
 #include <algorithm>
+#include <cmath>
 #include <new>
 #include <string>
 #include <vector>
@@ -25,13 +26,43 @@ SampleLoader::SampleLoader(grains::SourceExchange<grains::SampleBuffer>& exchang
 void SampleLoader::request(const juce::StringArray& candidates, const juce::String& original,
                            const juce::String& displayName, Origin origin)
 {
-    Request req{candidates, original, displayName, origin, 0}; // copies are made before lock_ is taken
+    Request req{candidates, original, displayName, origin, 0, 0.0, {}}; // copies are made before lock_ is taken
     {
         const juce::ScopedLock sl(lock_);
         req.generation = gate_.next(); // lock_ then gate mutex, never the reverse
+        req.targetRate = target_;
+        latest_ = req;
         pending_ = std::move(req);
     }
     notify();
+}
+
+bool SampleLoader::retarget(double rate)
+{
+    if (!std::isfinite(rate) || rate <= 0.0) return false;
+    {
+        const juce::ScopedLock sl(lock_);
+        if (rate == target_) return false;
+        target_ = rate;
+        if (latest_ && latest_->generation != settled_) {
+            // Still in flight (or just committed and not yet marked): redo it at the new rate. The
+            // older run notices the new generation and aborts, so the file is decoded once.
+            Request req = *latest_;
+            req.targetRate = rate;
+            req.generation = gate_.next();
+            latest_ = req;
+            pending_ = std::move(req);
+        } else if (published_ && published_->rate != rate) {
+            Request req{juce::StringArray{published_->path}, published_->original, published_->displayName,
+                        Origin::Reload, gate_.next(), rate, published_->label};
+            latest_ = req;
+            pending_ = std::move(req);
+        } else {
+            return false;
+        }
+    }
+    notify();
+    return true;
 }
 
 void SampleLoader::stop()
@@ -61,6 +92,13 @@ void SampleLoader::run()
     }
 }
 
+void SampleLoader::load(const Request& r)
+{
+    loadImpl(r);
+    const juce::ScopedLock sl(lock_);
+    settled_ = r.generation;
+}
+
 void SampleLoader::post(const Request& r, bool loaded, const juce::String& text, const juce::String& path,
                         bool relocated)
 {
@@ -79,7 +117,7 @@ bool SampleLoader::commitGated(const Request& r, grains::SourceExchange<grains::
     return accepted;
 }
 
-void SampleLoader::load(const Request& r)
+void SampleLoader::loadImpl(const Request& r)
 {
     const auto isCurrent = [&] { return !threadShouldExit() && gate_.current() == r.generation; };
 
@@ -91,7 +129,10 @@ void SampleLoader::load(const Request& r)
             if (isCurrent()) post(r, false, "Error: No sample");
             return;
         }
-        if (commitGated(r, std::move(clear))) post(r, false, "No sample");
+        if (commitGated(r, std::move(clear))) {
+            clearPublished();
+            post(r, false, "No sample");
+        }
         return;
     }
 
@@ -101,13 +142,20 @@ void SampleLoader::load(const Request& r)
     // Restore failure clears the source ("Missing"); a user load failure keeps the previous one.
     const auto fail = [&] {
         if (!isCurrent()) return;
+        if (r.origin == Origin::Reload) { // keep the live buffer and its label; never "Missing"
+            post(r, false, r.label);
+            return;
+        }
         if (r.origin == Origin::Restore) {
             auto clear = exchange_.stageClear();
             if (!clear) { // Box allocation failed: keep the previous source
                 post(r, false, "Error: " + name);
                 return;
             }
-            if (commitGated(r, std::move(clear))) post(r, false, "Missing: " + name);
+            if (commitGated(r, std::move(clear))) {
+                clearPublished();
+                post(r, false, "Missing: " + name);
+            }
         } else {
             post(r, false, "Error: " + name);
         }
@@ -124,7 +172,7 @@ void SampleLoader::load(const Request& r)
     const juce::File file(loadedPath);
     const bool relocated = !grains::SamplePathResolver::samePath(list[*hit], r.original.toStdString());
     name = file.getFileName();
-    post(r, false, "Loading: " + name);
+    if (r.origin != Origin::Reload) post(r, false, "Loading: " + name); // a rate-change reload is silent
 
     grains::BuildResult built;
     bool truncated = false;
@@ -154,10 +202,17 @@ void SampleLoader::load(const Request& r)
 
         const grains::ChannelView views[2] = {{buf.getReadPointer(0), static_cast<std::size_t>(len)},
                                               {chans > 1 ? buf.getReadPointer(1) : nullptr, static_cast<std::size_t>(len)}};
-        built = grains::buildSampleBuffer(views, static_cast<std::size_t>(chans), reader->sampleRate);
-    }
+        if (r.targetRate > 0.0)
+            built = grains::buildSampleBuffer(views, static_cast<std::size_t>(chans), reader->sampleRate,
+                                              r.targetRate, [&] { return !isCurrent(); });
+        else
+            built = grains::buildSampleBuffer(views, static_cast<std::size_t>(chans), reader->sampleRate);
+    } // the decode buffer is freed here, before the source is staged
+    if (built.error == grains::BuildError::Aborted) return; // superseded: nothing to publish or clear
     if (built.error != grains::BuildError::None) return fail();
     if (!isCurrent()) return;
+    truncated = truncated || built.truncated;
+    const double publishedRate = built.buffer->sampleRate();
 
     auto staged = exchange_.stage(std::move(built.buffer));
     if (!staged) { // Box allocation failed: keep the previous source
@@ -165,7 +220,19 @@ void SampleLoader::load(const Request& r)
         return;
     }
     if (!commitGated(r, std::move(staged))) return; // superseded: the Box is freed here, not published
-    post(r, true,
-         "Loaded: " + name + (relocated ? " (relocated)" : "") + (truncated ? " (truncated to 5 min)" : ""),
-         loadedPath, relocated);
+    const juce::String label =
+        "Loaded: " + name + (relocated ? " (relocated)" : "") + (truncated ? " (truncated to 5 min)" : "");
+    {
+        // After the gate released: the gate callback must not take lock_. Until this runs, retarget()
+        // sees the request as in flight, which only costs a redundant reissue.
+        const juce::ScopedLock sl(lock_);
+        published_ = Published{loadedPath, r.original, r.displayName, label, publishedRate};
+    }
+    post(r, true, label, loadedPath, relocated);
+}
+
+void SampleLoader::clearPublished()
+{
+    const juce::ScopedLock sl(lock_);
+    published_.reset();
 }

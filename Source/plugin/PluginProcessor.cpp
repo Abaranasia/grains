@@ -63,6 +63,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainsAudioProcessor::create
 void GrainsAudioProcessor::prepareToPlay(double sampleRate, int maxBlockSize)
 {
     engine_.prepare(sampleRate, kSeed);
+    loader_.retarget(sampleRate); // reissues or reloads off this thread; a no-op when the rate is unchanged
     scratchSize_ = std::max(1, maxBlockSize);
     scratch_.allocate(static_cast<size_t>(scratchSize_), true);
 }
@@ -139,6 +140,7 @@ void GrainsAudioProcessor::setStateInformation(const void* data, int sizeInBytes
                 list.add(juce::String::fromUTF8(c.c_str()));
             loader_.request(list, juce::String::fromUTF8(ref.absolute.c_str()), juce::String::fromUTF8(ref.name.c_str()),
                             SampleLoader::Origin::Restore);
+            restoreGeneration_.store(loader_.latestGeneration());
         }
 }
 
@@ -150,9 +152,11 @@ void GrainsAudioProcessor::loadFile(const juce::File& file)
 
 void GrainsAudioProcessor::onLoadResult(const SampleLoader::Result& r)
 {
-    if (r.generation < loader_.latestGeneration()) return; // superseded by a newer request
-    status_ = r.text;
-    if (r.loaded && r.origin == SampleLoader::Origin::User) {
+    // Results arrive in publish order, and a User result may be superseded before it is processed (for
+    // example by a rate-change reload of the same file). The file is live either way, so persist it
+    // before the generation filter. A result older than the last state restore is skipped: the restore
+    // replaced the state it would write into.
+    if (r.loaded && r.origin == SampleLoader::Origin::User && r.generation > restoreGeneration_.load()) {
         const auto ref = grains::SamplePathResolver::makeRef(r.path.toStdString(), localAnchors());
         apvts_.state.setProperty(kSamplePath, r.path, nullptr);
         apvts_.state.setProperty(kSampleName, juce::String::fromUTF8(ref.name.c_str()), nullptr);
@@ -164,6 +168,8 @@ void GrainsAudioProcessor::onLoadResult(const SampleLoader::Result& r)
             apvts_.state.setProperty(kSampleRel, juce::String::fromUTF8(ref.relative.c_str()), nullptr);
         }
     }
+    if (r.generation < loader_.latestGeneration()) return; // superseded: only the label is filtered
+    status_ = r.text;
     broadcaster_.sendChangeMessage();
 }
 

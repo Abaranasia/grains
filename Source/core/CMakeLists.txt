@@ -3,6 +3,7 @@ add_library(grains_core STATIC
   src/ParamLimits.cpp
   src/GrainScheduler.cpp
   src/GranularEngine.cpp
+  src/Resampler.cpp
   src/SampleBuffer.cpp
   src/SampleBuilder.cpp
   src/SamplePathResolver.cpp

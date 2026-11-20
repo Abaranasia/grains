@@ -46,6 +46,7 @@ add_executable(grains_tests
   test_source_exchange.cpp
   test_generation_gate.cpp
   test_sample_builder.cpp
+  test_resampler.cpp
   test_sample_path_resolver.cpp)
 target_include_directories(grains_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(grains_tests PRIVATE grains_core Catch2::Catch2WithMain Threads::Threads)
