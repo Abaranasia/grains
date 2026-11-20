@@ -66,9 +66,10 @@ catch_discover_tests(grains_realtime_tests)
 
 # R-BH-6 fail-nth-allocation injection. Same replaced operator new as the realtime executable, plus
 # armFailure(); it must never be linked into grains_tests. A sanitizer job may exclude this
-# executable by CTest name (R-BH-5 fallback). Windows CI builds Debug only, where all four allocation
-# sweeps (resampler, builder, planner retarget and settle) are compiled out (GRAINS_ALLOC_SWEEPS), so
-# there it runs just the armFailure self-tests; the sweeps run in the Linux ASan job and local Release runs.
+# executable by CTest name (R-BH-5 fallback). In an MSVC Debug build all four allocation sweeps
+# (resampler, builder, planner retarget and settle) are compiled out (GRAINS_ALLOC_SWEEPS), so there it
+# runs just the armFailure self-tests; the sweeps run in the Windows Release CI step, the Linux ASan
+# job and local Release runs.
 add_executable(grains_alloc_failure_tests
   support/AllocationCounter.cpp
   test_alloc_failure.cpp)
