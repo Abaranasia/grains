@@ -21,7 +21,8 @@ struct LoadRequest {
     LoadOrigin origin = LoadOrigin::User;
     std::uint64_t generation = 0;
     double targetRate = 0.0; // 0 = publish at the file's own rate
-    std::string label;       // Reload only: the status line to repost if the reload fails
+    std::string label;       // Reload only: the status line the reload posts on success or failure
+                             // (the published file's label, or a failed request's error line)
 };
 
 // What is live in the exchange, for rate-change reloads.
