@@ -27,20 +27,20 @@ Spec IDs: R-SS-15 (R4-001), R-SS-16 (LoadPlanner), R-RS-9 (perf), R-RS-10 (OutOf
 
 ## Phase 4: Perf and OutOfMemory (PR-B, stacked on PR-A)
 
-- [ ] 4.1 `tests/test_resampler.cpp`: hidden `[.][perf]` "300 s stereo 96k to 44.1k within 6 s" (`REQUIRE`) and 384k to 44.1k (`WARN` only); run in Release, record times in the R-RS-9 spec. (R-RS-9)
-- [ ] 4.2 RED+GREEN `[resampler]`: 1000 frames, src=1, dst=1e12 returns `OutOfMemory`, no channels (real `bad_alloc`, no hooks). (R-RS-10)
+- [x] 4.1 `tests/test_resampler.cpp`: hidden `[.][perf]` "300 s stereo 96k to 44.1k within 6 s" (`REQUIRE`) and 384k to 44.1k (`WARN` only); run in Release, record times in the R-RS-9 spec. (R-RS-9)
+- [x] 4.2 RED+GREEN `[allocfail][resampler]`: fail-nth-allocation sweep over `grains::resample` returns `OutOfMemory`, no channels, no leak, in `grains_alloc_failure_tests` (the 1e12 huge-ratio trick was dropped: ASan aborts on absurd requests). Gated by `GRAINS_ALLOC_SWEEPS`. (R-RS-10)
 
 ## Phase 5: Fault injection (PR-B)
 
-- [ ] 5.1 RED `tests/test_alloc_failure.cpp`: new executable `grains_alloc_failure_tests`, ctest-registered in `tests/CMakeLists.txt`, never in `grains_tests`; builder sweep n=1.. (passthrough, 48k to 44.1k, mono/stereo, 1000 frames): fired gives `OutOfMemory` and null buffer; not fired gives `None` and stop. (R-BH-6, R-RS-10)
-- [ ] 5.2 GREEN: `armFailure(n)`, `disarmFailure()`, `failureFired()` in `tests/support/AllocationCounter.{h,cpp}` (atomic countdown in `plainAlloc`/`alignedAlloc`, null on zero).
-- [ ] 5.3 RED+GREEN planner OOM: with failure armed, `retarget` returns false and `target()` unchanged; `settle` issues nothing, does not throw. (R-BH-6, R-SS-16)
+- [x] 5.1 RED `tests/test_alloc_failure.cpp`: new executable `grains_alloc_failure_tests`, ctest-registered in `tests/CMakeLists.txt`, never in `grains_tests`; builder sweep n=1.. (passthrough, 48k to 44.1k, mono/stereo, 1000 frames): fired gives `OutOfMemory` and null buffer; not fired gives `None` and stop. (R-BH-6, R-RS-10)
+- [x] 5.2 GREEN: `armFailure(n)`, `disarmFailure()`, `failureFired()` in `tests/support/AllocationCounter.{h,cpp}` (atomic countdown in `plainAlloc`/`alignedAlloc`, null on zero).
+- [x] 5.3 RED+GREEN planner OOM: with failure armed, `retarget` returns false and `target()` unchanged; `settle` issues nothing, does not throw. (R-BH-6, R-SS-16)
 
 ## Phase 6: Contingencies
 
-- [ ] 6.1 If 5.1 terminates under MSVC Debug (iterator proxy allocation in `noexcept` move): register `[allocfail]` for Release only; note in design Open Questions. (R-BH-6)
-- [ ] 6.2 If 4.1 measures 96k to 44.1k above 6 s: separate slice adding per-channel `std::thread` (bit-exact); existing accuracy tests unchanged. (R-RS-9)
-- [ ] 6.3 Final full ctest; record perf numbers. Manual host checks D.1-D.5 remain out of scope.
+- [x] 6.1 If 5.1 terminates under MSVC Debug (iterator proxy allocation in `noexcept` move): register `[allocfail]` for Release only; note in design Open Questions. (R-BH-6)
+- [x] 6.2 (not triggered: 5.4 s) If 4.1 measures 96k to 44.1k above 6 s: separate slice adding per-channel `std::thread` (bit-exact); existing accuracy tests unchanged. (R-RS-9)
+- [x] 6.3 Final full ctest; record perf numbers. Manual host checks D.1-D.5 remain out of scope.
 
 ## Review Workload Forecast
 

@@ -32,10 +32,12 @@ A 300 s stereo 96000 to 48000 conversion (integer ratio) MUST complete in at mos
 When the output cannot be allocated, resampling MUST NOT throw and MUST NOT produce output, and MUST report a result distinguishable from rejection (R-RS-8) and abort (R-RS-6), namely `OutOfMemory`. The builder MUST map that result to its own out-of-memory status, and MUST report the same status when it fails to allocate its own buffers. Both paths MUST be covered by automated tests that do not install allocation hooks in `grains_tests`.
 
 #### Scenario: Real allocation failure in the resampler [Catch2]
-- Given a small input and a destination rate so high that the output length exceeds 128 TB (for example 1000 frames at source rate 1 to a destination of 1e12 Hz) and the default frame limit of the resampler
+- Given a small input and a test-only allocation hook (`armFailure(n)`, linked only into `grains_alloc_failure_tests`) that makes the n-th allocation throw `std::bad_alloc`, for n = 1, 2, ... until a run is not hit by the failure
 - When resampled
-- Then the call returns `OutOfMemory`, no output is produced and no exception escapes
-- And the test needs no allocation hook and no real memory is committed
+- Then every run hit by the failure returns `OutOfMemory`, produces no output, lets no exception escape and leaks nothing
+- And the run the failure missed returns `Ok`
+- And the hook is never linked into `grains_tests`
+- Note: a huge-ratio request (1000 frames from 1 Hz to 1e12 Hz) was dropped because the ASan allocator aborts on an absurd request even for a throwing `operator new`. Like the other allocation sweeps, this case is compiled out under the MSVC debug runtime (`GRAINS_ALLOC_SWEEPS`), where the injected failure reaches `std::terminate`.
 
 #### Scenario: Out-of-memory differs from rejection and abort [Catch2]
 - Given the result of the scenario above

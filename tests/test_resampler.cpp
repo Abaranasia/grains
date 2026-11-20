@@ -424,3 +424,30 @@ TEST_CASE("resample: 300 s stereo 96k to 48k within 3 s", "[.][perf]")
     WARN("resample wall time: " << seconds << " s");
     CHECK(seconds <= 3.0);
 }
+
+// R-RS-9. Run by hand in Release; the times are recorded in the apply-progress artifact.
+TEST_CASE("resample: 300 s stereo 96k to 44.1k within 6 s", "[.][perf]")
+{
+    const std::size_t n = 300u * 96000u;
+    const auto l = noise(n, 17), r = noise(n, 18);
+    const ChannelView st[] = {{l.data(), l.size()}, {r.data(), r.size()}};
+    const auto t0 = std::chrono::steady_clock::now();
+    const auto out = grains::resample(st, 2, 96000.0, 44100.0, kNever);
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    REQUIRE(out.status == ResampleStatus::Ok);
+    WARN("resample wall time: " << seconds << " s");
+    REQUIRE(seconds <= 6.0);
+}
+
+// R-RS-9 informational: no budget, the time is only reported.
+TEST_CASE("resample: 300 s stereo 384k to 44.1k reports its time", "[.][perf]")
+{
+    const std::size_t n = 300u * 384000u;
+    const auto l = noise(n, 19), r = noise(n, 20);
+    const ChannelView st[] = {{l.data(), l.size()}, {r.data(), r.size()}};
+    const auto t0 = std::chrono::steady_clock::now();
+    const auto out = grains::resample(st, 2, 384000.0, 44100.0, kNever);
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    REQUIRE(out.status == ResampleStatus::Ok);
+    WARN("resample wall time: " << seconds << " s");
+}

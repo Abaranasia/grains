@@ -84,7 +84,7 @@ Plugin-related targets (JUCE, VST3, Standalone) MUST be created only when option
 - Then `testing.runner` is `ctest` and `layers.unit` is `true`
 
 ### R-BH-5 CI and sanitizers
-The repository MUST provide a GitHub Actions workflow that runs on push to `main` and on every `pull_request` (no branch filter on `pull_request`) with three jobs: (1) Windows MSVC, x64 Debug build plus ctest; (2) Linux clang, Ninja Debug build plus ctest with AddressSanitizer and UndefinedBehaviorSanitizer (including float-cast-overflow) enabled; (3) an informational Windows MSVC plugin job that configures with `GRAINS_BUILD_PLUGIN=ON`, leaves `GRAINS_JUCE_DIR` at its default (absent on the runner) so the pinned fetch path of R-BH-3 is exercised, and builds the `grains_plugin` target. The JUCE version, commit SHA and SHA256 digest MUST be defined in exactly one file, `cmake/JucePin.cmake`, which the root CMake project includes to drive the fetch of R-BH-3; no other file (CMake, workflow, or source) MAY repeat the SHA or the digest. The plugin job MUST NOT run tests and MUST NOT be a required check for merges to `main`; it SHOULD cache the JUCE download with a cache key derived by hashing `cmake/JucePin.cmake` (so that any change to the version, SHA or digest invalidates the cache, and no other file's change does), and MUST set a job timeout. A cache hit restores the fetched sources without repeating the `URL_HASH` check; only a cache miss performs a verified download. Jobs (1) and (2) MUST keep `GRAINS_BUILD_PLUGIN` OFF. Every third-party action used by the workflow, including in the plugin job, MUST be pinned by full commit SHA. Sanitizers MUST be controlled by an opt-in CMake option `GRAINS_SANITIZE` (default OFF) whose flags apply to all targets including Catch2, and MUST NOT require suppression files. The workflow MUST use least-privilege permissions (`contents: read`) and cancel superseded runs of the same ref. If the allocation counter proves incompatible with ASan's operator new/delete, the sanitizer job MAY exclude the realtime tests, provided the Windows job still runs them. Branch protection that makes CI a required check for merges to `main` is not specified here. The default configure/build (option OFF) MUST be unchanged and JUCE-free (R-BH-1).
+The repository MUST provide a GitHub Actions workflow that runs on push to `main` and on every `pull_request` (no branch filter on `pull_request`) with three jobs: (1) Windows MSVC, x64 Debug build plus ctest, followed by a Release build plus ctest in a separate build directory (the allocation-failure sweeps are compiled out under the MSVC debug runtime, so only the Release run exercises them on Windows); (2) Linux clang, Ninja Debug build plus ctest with AddressSanitizer and UndefinedBehaviorSanitizer (including float-cast-overflow) enabled; (3) an informational Windows MSVC plugin job that configures with `GRAINS_BUILD_PLUGIN=ON`, leaves `GRAINS_JUCE_DIR` at its default (absent on the runner) so the pinned fetch path of R-BH-3 is exercised, and builds the `grains_plugin` target. The JUCE version, commit SHA and SHA256 digest MUST be defined in exactly one file, `cmake/JucePin.cmake`, which the root CMake project includes to drive the fetch of R-BH-3; no other file (CMake, workflow, or source) MAY repeat the SHA or the digest. The plugin job MUST NOT run tests and MUST NOT be a required check for merges to `main`; it SHOULD cache the JUCE download with a cache key derived by hashing `cmake/JucePin.cmake` (so that any change to the version, SHA or digest invalidates the cache, and no other file's change does), and MUST set a job timeout. A cache hit restores the fetched sources without repeating the `URL_HASH` check; only a cache miss performs a verified download. Jobs (1) and (2) MUST keep `GRAINS_BUILD_PLUGIN` OFF. Every third-party action used by the workflow, including in the plugin job, MUST be pinned by full commit SHA. Sanitizers MUST be controlled by an opt-in CMake option `GRAINS_SANITIZE` (default OFF) whose flags apply to all targets including Catch2, and MUST NOT require suppression files. The workflow MUST use least-privilege permissions (`contents: read`) and cancel superseded runs of the same ref. If the allocation counter proves incompatible with ASan's operator new/delete, the sanitizer job MAY exclude the realtime tests, provided the Windows job still runs them. Branch protection that makes CI a required check for merges to `main` is not specified here. The default configure/build (option OFF) MUST be unchanged and JUCE-free (R-BH-1).
 
 #### Scenario: All three jobs run on push to main and on PRs
 - Given `.github/workflows/ci.yml` is present
@@ -131,3 +131,31 @@ The repository MUST provide a GitHub Actions workflow that runs on push to `main
 - Given the AllocationCounter conflicts with ASan
 - When the sanitizer job runs
 - Then it MAY run `ctest -E "^realtime:"`, and the Windows job still runs the realtime tests
+
+### R-BH-6 Fail-injection test executable
+Allocation-failure injection (an `armFailure(n)` facility that makes the n-th subsequent global allocation fail, with a way to disarm it) MUST be provided by the test-support `AllocationCounter` and MUST be linked only into a dedicated test executable separate from `grains_tests`. `grains_tests` MUST NOT replace or link the global `operator new`/`operator delete` or the fail-injection code. The dedicated executable MUST be registered with CTest so `ctest` runs it, MUST build without JUCE (R-BH-1), and MUST honour the sanitizer exclusion fallback of R-BH-5 (it MAY be excluded from the sanitizer job while still running on the Windows job). Arming MUST be thread-local-safe or documented single-thread, MUST be disarmed automatically after it fires once, and an unarmed run MUST behave exactly as the existing allocation counter. A failing injection test MUST make `ctest` return non-zero.
+
+#### Scenario: Injection isolated from grains_tests [Catch2]
+- Given the configured build
+- When the link dependencies and sources of `grains_tests` are inspected
+- Then neither the fail-injection code nor a replacement global `operator new` is present
+
+#### Scenario: Executable registered with ctest [CI]
+- Given a configured and built tree
+- When `ctest` is run
+- Then the fail-injection executable's cases are discovered and executed, and a deliberately failing case makes the exit code non-zero
+
+#### Scenario: Nth allocation fails once [Catch2, separate executable]
+- Given `armFailure(3)`
+- When code performs five allocations
+- Then only the third throws `std::bad_alloc`, the others succeed, and the facility is disarmed afterwards
+
+#### Scenario: Unarmed behaviour unchanged [Catch2, separate executable]
+- Given no failure armed
+- When existing realtime allocation-counting cases run
+- Then their counts and results match the previous behaviour
+
+#### Scenario: Sanitizer fallback [CI]
+- Given the sanitizer job cannot coexist with the replacement `operator new`
+- When it runs
+- Then it MAY exclude the fail-injection executable by CTest name, and the Windows job still runs it

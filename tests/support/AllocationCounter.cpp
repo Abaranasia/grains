@@ -15,6 +15,23 @@ std::atomic<bool> gActive{false};
 std::atomic<std::size_t> gCount{0};
 std::atomic<std::size_t> gFrees{0};
 
+std::atomic<std::size_t> gFailIn{0}; // allocations left until the injected failure; 0 = disarmed
+std::atomic<bool> gFired{false};
+
+// True when this allocation is the armed one. Counts down only while armed; fires once.
+bool shouldFail() noexcept
+{
+    std::size_t left = gFailIn.load(std::memory_order_relaxed);
+    while (left != 0) {
+        if (gFailIn.compare_exchange_weak(left, left - 1, std::memory_order_relaxed)) {
+            if (left != 1) return false;
+            gFired.store(true, std::memory_order_relaxed);
+            return true;
+        }
+    }
+    return false;
+}
+
 void note() noexcept
 {
     if (gActive.load(std::memory_order_relaxed)) gCount.fetch_add(1, std::memory_order_relaxed);
@@ -27,6 +44,7 @@ void noteFree(void* p) noexcept
 
 void* plainAlloc(std::size_t n) noexcept
 {
+    if (shouldFail()) return nullptr; // an injected failure is not a counted allocation
     note();
     return std::malloc(n != 0 ? n : 1);
 }
@@ -34,6 +52,7 @@ void* plainAlloc(std::size_t n) noexcept
 // Aligned blocks must be released by the matching aligned free (MSVC: _aligned_malloc/_aligned_free).
 void* alignedAlloc(std::size_t n, std::size_t align) noexcept
 {
+    if (shouldFail()) return nullptr;
     note();
     if (n == 0) n = 1;
 #if defined(_MSC_VER)
@@ -82,6 +101,19 @@ AllocationScope::~AllocationScope() { gActive.store(false, std::memory_order_rel
 std::size_t AllocationScope::count() const noexcept { return gCount.load(std::memory_order_relaxed); }
 
 std::size_t AllocationScope::frees() const noexcept { return gFrees.load(std::memory_order_relaxed); }
+
+void armFailure(std::size_t n) noexcept
+{
+    gFired.store(false, std::memory_order_relaxed);
+    gFailIn.store(n, std::memory_order_relaxed);
+}
+
+void disarmFailure() noexcept
+{
+    gFailIn.store(0, std::memory_order_relaxed);
+}
+
+bool failureFired() noexcept { return gFired.load(std::memory_order_relaxed); }
 
 } // namespace grains_test
 
