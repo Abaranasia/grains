@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #pragma once
 
-#include <grains/GenerationGate.h>
+#include <grains/LoadPlanner.h>
 #include <grains/SampleBuffer.h>
 #include <grains/SourceExchange.h>
 
@@ -11,7 +11,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <optional>
 
 // Background decoder: reads a file, builds a SampleBuffer and publishes it to the exchange. The
 // latest request wins (generation counter). Results are delivered on the message thread.
@@ -19,7 +18,7 @@
 // resampled to it (0 = unknown, so the file is published at its own rate).
 class SampleLoader final : private juce::Thread {
 public:
-    enum class Origin { User, Restore, Reload };
+    using Origin = grains::LoadOrigin;
 
     struct Result {
         std::uint64_t generation;
@@ -39,7 +38,7 @@ public:
     // path the state stored; loading any other candidate is reported as relocated.
     void request(const juce::StringArray& candidates, const juce::String& original,
                  const juce::String& displayName, Origin origin);
-    std::uint64_t latestGeneration() const noexcept { return gate_.current(); }
+    std::uint64_t latestGeneration() const noexcept { return planner_.gate().current(); }
 
     // Any thread except the audio thread (call from prepareToPlay). Sets the target rate for later
     // requests. A request still in flight is reissued at the new rate (so a restore before prepare
@@ -51,43 +50,18 @@ public:
     void stop();
 
 private:
-    struct Request {
-        juce::StringArray candidates;
-        juce::String original;
-        juce::String displayName;
-        Origin origin;
-        std::uint64_t generation;
-        double targetRate = 0.0; // 0 = publish at the file's own rate
-        juce::String label;      // Reload only: the status line to repost if the reload fails
-    };
-
-    // What is live in the exchange, for rate-change reloads. Written under lock_ after commitGated.
-    struct Published {
-        juce::String path; // the file actually loaded
-        juce::String original;
-        juce::String displayName;
-        juce::String label; // the "Loaded: ..." line
-        double rate;        // the rate of the published buffer
-    };
-
     void run() override;
-    void load(const Request& r); // loadImpl, then marks r settled
-    void loadImpl(const Request& r);
-    void clearPublished(); // takes lock_; call after commitGated, never inside the gate callback
+    void load(const grains::LoadRequest& r); // loadImpl, then planner_.settle (which may issue a Reload)
+    grains::LoadOutcome loadImpl(const grains::LoadRequest& r);
     // Commits s to the exchange only if r is still the latest request (atomic with request()).
     // Frees any displaced or rejected Box after the gate unlocks. True when accepted.
-    bool commitGated(const Request& r, grains::SourceExchange<grains::SampleBuffer>::Staged s);
-    void post(const Request& r, bool loaded, const juce::String& text, const juce::String& path = {},
+    bool commitGated(const grains::LoadRequest& r, grains::SourceExchange<grains::SampleBuffer>::Staged s);
+    void post(const grains::LoadRequest& r, bool loaded, const juce::String& text, const juce::String& path = {},
               bool relocated = false);
 
     grains::SourceExchange<grains::SampleBuffer>& exchange_;
     Callback onResult_;
     std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
-    grains::GenerationGate gate_;
-    juce::CriticalSection lock_;
-    std::optional<Request> pending_; // guarded by lock_
-    double target_ = 0.0;                      // guarded by lock_: rate for new requests
-    std::optional<Request> latest_;            // guarded by lock_: the last request issued
-    std::uint64_t settled_ = 0;                // guarded by lock_: generation whose load() has finished
-    std::optional<Published> published_;       // guarded by lock_: nullopt when nothing is live
+    std::string lastText_; // loader thread only: the last status line posted by the current run
+    grains::LoadPlanner planner_; // request bookkeeping, the generation gate and the published source
 };
