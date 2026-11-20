@@ -46,7 +46,7 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
     // Message thread.
-    void loadFile(const juce::File& file) { loader_.request(file.getFullPathName(), SampleLoader::Origin::User); }
+    void loadFile(const juce::File& file);
     const juce::String& status() const noexcept { return status_; }
     juce::ChangeBroadcaster& statusBroadcaster() noexcept { return broadcaster_; }
 
@@ -64,6 +64,7 @@ private:
     grains::GranularEngine engine_;
     juce::HeapBlock<float> scratch_; // right channel when the host output is mono
     int scratchSize_ = 0;
+    std::atomic<std::uint64_t> restoreGeneration_{0}; // generation of the last setStateInformation request
     juce::String status_{"No sample"};
     juce::ChangeBroadcaster broadcaster_;
     SampleLoader loader_;

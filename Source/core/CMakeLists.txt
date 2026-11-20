@@ -3,8 +3,10 @@ add_library(grains_core STATIC
   src/ParamLimits.cpp
   src/GrainScheduler.cpp
   src/GranularEngine.cpp
+  src/Resampler.cpp
   src/SampleBuffer.cpp
   src/SampleBuilder.cpp
+  src/SamplePathResolver.cpp
   src/WindowTable.cpp)
 target_include_directories(grains_core PUBLIC include)
 target_compile_features(grains_core PUBLIC cxx_std_17)

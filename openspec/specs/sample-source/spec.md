@@ -66,7 +66,7 @@ The sample builder MUST accept planar float data with an explicit sample rate an
 - Then the result is stereo equal to channels 0 and 1 of the input
 
 ### R-SS-5 Sample builder: length cap
-The builder MUST cap length at 5 minutes measured at the file's sample rate (`floor(300 * rate)` frames), and the cap MUST be clamped to `INT_MAX` frames. A rate whose `floor(300 * rate)` is 0 (a positive rate below 1/300 Hz) yields a cap of 0 frames and MUST be rejected as `BadSampleRate`, without producing a source. A rate large enough that `300 * rate` overflows the frame-count type (including `DBL_MAX`) MUST yield a cap of exactly `INT_MAX`, with no undefined behaviour. Longer input MUST be truncated to the cap and the result MUST report that truncation occurred. Input at or below the cap MUST be kept in full with no truncation reported. The builder MUST NOT resample.
+The builder MUST cap length at 5 minutes measured at the file's sample rate (`floor(300 * rate)` frames), and the cap MUST be clamped to `INT_MAX` frames. A rate whose `floor(300 * rate)` is 0 (a positive rate below 1/300 Hz) yields a cap of 0 frames and MUST be rejected as `BadSampleRate`, without producing a source. A rate large enough that `300 * rate` overflows the frame-count type (including `DBL_MAX`) MUST yield a cap of exactly `INT_MAX`, with no undefined behaviour. Longer input MUST be truncated to the cap and the result MUST report that truncation occurred. Input at or below the cap MUST be kept in full with no truncation reported. When a target rate is supplied, the builder MUST resample the capped input to that rate (see `sample-resampling`), the published source MUST report the target rate, and the resampled output MUST be capped at `floor(300 * target)` frames (clamped to `INT_MAX`), reporting truncation if the cap bites. When no target rate is supplied, or it equals the file rate, the builder MUST NOT alter the samples. A target rate whose downsampling ratio exceeds 1000:1 (file rate / target rate > 1000) MUST be rejected as `BadSampleRate` without producing a source (see `sample-resampling` R-RS-8).
 
 #### Scenario: Over-length input truncated [Catch2]
 - Given input longer than 300 seconds at its sample rate
@@ -97,6 +97,26 @@ The builder MUST cap length at 5 minutes measured at the file's sample rate (`fl
 - Given a sample rate of `DBL_MAX`
 - When `maxSourceFrames` is evaluated
 - Then it returns exactly `INT_MAX` with no undefined behaviour (clean under UBSan float-cast-overflow)
+
+#### Scenario: Resampled to target rate [Catch2]
+- Given 1 s of stereo input at 96000 Hz and target rate 48000
+- When the builder runs
+- Then the source has 48000 frames, its rate is 48000, and no truncation is reported
+
+#### Scenario: Equal rate is bit-exact [Catch2]
+- Given input at 48000 Hz and target 48000
+- When the builder runs
+- Then the source samples are bit-identical to the input
+
+#### Scenario: Output cap at target rate [Catch2]
+- Given a file at 22050 Hz holding `floor(300 * 22050)` frames and target rate 192000
+- When the builder runs
+- Then the source has exactly `floor(300 * 192000)` frames and truncation is reported only if the resampled length exceeded that cap
+
+#### Scenario: Invalid target rate rejected [Catch2]
+- Given a target rate of 0, -1, NaN or Inf
+- When the builder runs on otherwise valid data
+- Then it is rejected with `BadSampleRate` and no source is produced
 
 ### R-SS-6 Sample builder: rejection
 The builder MUST reject, without producing a source: zero channels, zero frames, a non-finite sample rate (NaN or Inf), a sample rate less than or equal to 0, and channels whose lengths differ. Rejection MUST be reported to the caller with a distinguishable failure result and MUST NOT throw.
@@ -150,12 +170,27 @@ The plugin MUST decode a requested file on a background thread, never on the aud
 - Then shutdown waits for the read to return or fail, no "killing thread by force" message is emitted, and once the read ends the process exits without crash or undefined behaviour
 
 ### R-SS-8 Path persistence and async reload
-The absolute path of the loaded file MUST be stored as a property on the processor's `apvts_.state` and MUST be saved and restored through `getStateInformation` / `setStateInformation`. After state restore, the file MUST be reloaded asynchronously through the loader without blocking the calling thread. Absolute paths are used; relative-path lookup and embedded audio are not provided.
+The loaded file's reference MUST be stored as properties on the processor's `apvts_.state` and MUST be saved and restored through `getStateInformation` / `setStateInformation`. The reference MUST consist of: `samplePath` (the absolute path, always written, unchanged from the previous format), `sampleName` (the file name without directories), and, only when the file lies under an anchor (Music, Documents, Desktop, or Home; the longest matching anchor wins), `sampleAnchor` (the anchor key: `music`, `documents`, `desktop`, or `home`) and `sampleRel` (the path relative to that anchor). After state restore, the file MUST be reloaded asynchronously through the loader without blocking the calling thread, by trying the ordered candidate list defined in R-SS-12 and loading the first candidate that exists. The plugin's search directories MUST be exactly this machine's four anchor directories (music, documents, desktop, home, in that order); the name search MUST look only directly inside each of them (non-recursive). State written by the previous format (only `samplePath`) MUST still restore. State written by this format MUST remain readable by code that knows only `samplePath`. Embedded audio, a last-used directory, rewriting state after a relocated restore, recursive search, and a content hash or size check are not provided.
 
 #### Scenario: State round trip restores file [Manual]
 - Given a loaded file and non-default parameters
 - When state is saved and restored
-- Then the path property is restored, the file reloads asynchronously, and sound resumes with the same parameters
+- Then the reference properties are restored, the file reloads asynchronously, and sound resumes with the same parameters
+
+#### Scenario: Anchored file writes all reference fields [Manual]
+- Given a file loaded from under the user's Music folder
+- When state is saved
+- Then the state holds `samplePath`, `sampleName`, `sampleAnchor` (`music`) and `sampleRel`
+
+#### Scenario: File outside every anchor writes no anchor fields [Manual]
+- Given a file loaded from a folder that is under no anchor
+- When state is saved
+- Then the state holds `samplePath` and `sampleName` and holds no `sampleAnchor` or `sampleRel`
+
+#### Scenario: Old-format state restores [Manual]
+- Given saved state that holds only `samplePath` of an existing file
+- When state is restored
+- Then the file loads, the label shows its name without "(relocated)", and sound resumes
 
 ### R-SS-9 Missing file behaviour
 If the restored path is empty, the output MUST be silent (no source is active) and the file label MUST read "No sample". If restoring a non-empty path fails (the file is missing, unreadable, or corrupt), the output MUST be silent (no source is active), the stored path MUST be kept unchanged in state, and the file label MUST read "Missing: <name>" where `<name>` is the file name (not the full path). In both cases the source MUST be cleared through an explicit clear operation, which is distinct from publishing a buffer; an empty buffer MUST NEVER be published to achieve the clear. If the allocation required to perform the clear fails, the previously published source MUST stay active and nothing MUST be cleared or published; the file label MUST then read "Error: No sample" for an empty restored path, or "Error: <name>" (file name, not the full path) for a non-empty restored path, and the stored path MUST be kept unchanged in state. A restore request that has been superseded MUST NOT clear the source. A later successful load MUST replace the path.
@@ -258,5 +293,225 @@ A JUCE-free core primitive (the generation gate) MUST own a request generation c
 - When the consumer runs acquire
 - Then the allocation counter is unchanged across the call and no buffer is freed on the consumer thread
 
+### R-SS-12 Sample path resolver: reference and candidates
+A JUCE-free core unit `grains::SamplePathResolver` MUST use `std::string` only (no JUCE, no `std::filesystem`) and MUST provide three operations.
+
+`makeRef(absolute, anchors)` MUST produce a reference holding the absolute path, the file name, and, when the path lies under one of the supplied anchors, that anchor's identifier and the path relative to it. The longest matching anchor MUST win. Anchor matching MUST be on whole path components only (an anchor `C:\Users\a` MUST NOT match `C:\Users\ab\x.wav`). An anchor that equals the whole path (no file component) MUST NOT match. A path containing a `..` component MUST NOT get an anchor. The stored relative path MUST use `/` as separator. Restoring a stored relative path MUST normalise any `\` in it to `/` only when the stored absolute path is not POSIX-shaped; when it is POSIX-shaped, `\` is a file-name character and MUST be kept.
+
+`candidates(ref, anchors, searchDirs)` MUST return an ordered, deduplicated list of paths: (1) the reference's anchor, resolved against this machine's `anchors`, joined with its relative path, when the reference has an anchor and this machine supplies that anchor; (2) the stored absolute path; (3) the file name joined to each search directory, in the given order. The list MUST NOT hold more than 10 entries; entries beyond the cap MUST be dropped from the end. The list MUST be empty when the stored absolute path is empty (see R-SS-13), regardless of the other reference fields.
+
+Stored values MUST be validated before use. A stored relative path that is empty, absolute, or contains an empty, `.` or `..` component MUST be ignored, and no anchor candidate MUST be produced from it. A stored name that is empty, `.`, `..`, or contains a separator (`/`, or `\` when the stored absolute path is not POSIX-shaped) MUST be ignored in favour of the name derived from the absolute path. When joining onto a Windows-shaped directory (an anchor or a search directory), a relative path or name containing `\` or `:` MUST be skipped, so that no candidate escapes that directory.
+
+`resolve(candidates, exists)` MUST call the injected predicate on candidates in order and return the first candidate for which it returns true, together with its index; it MUST return a not-found result when no candidate exists, and MUST NOT call the predicate on later candidates once one matches. No operation MAY touch the filesystem itself.
+
+#### Scenario: makeRef finds an anchor [Catch2]
+- Given anchors `music`=`C:\Users\a\Music` and `home`=`C:\Users\a`, and the path `C:\Users\a\Music\loops\kick.wav`
+- When `makeRef` runs
+- Then the anchor is `music`, the relative path is `loops/kick.wav` (stored relative paths always use `/`), the name is `kick.wav`, and the absolute path is unchanged
+
+#### Scenario: Longest anchor wins [Catch2]
+- Given the same anchors and the path `C:\Users\a\Music\kick.wav` (which lies under both)
+- When `makeRef` runs
+- Then the anchor is `music` and not `home`
+
+#### Scenario: Anchor matches whole components only [Catch2]
+- Given the anchor `C:\Users\a` and the path `C:\Users\ab\kick.wav`
+- When `makeRef` runs
+- Then the reference has no anchor
+
+#### Scenario: Path outside every anchor [Catch2]
+- Given the path `D:\samples\kick.wav` and anchors that do not contain it
+- When `makeRef` runs
+- Then the reference has no anchor and no relative path, and its name is `kick.wav`
+
+#### Scenario: Windows drive match ignores case [Catch2]
+- Given the anchor `C:\Users\a\Music` and the path `c:\users\A\MUSIC\Kick.wav`
+- When `makeRef` runs
+- Then the anchor is `music` and the relative path is `Kick.wav` (original case preserved)
+
+#### Scenario: UNC path matches case-insensitively [Catch2]
+- Given the anchor `\\Server\Share\Music` and the path `\\server\share\music\loops\kick.wav`
+- When `makeRef` runs
+- Then the anchor matches and the relative path is `loops/kick.wav`
+
+#### Scenario: Drive paths with forward slashes match [Catch2]
+- Given the anchor `C:\Users\a\Music` and the path `C:/Users/a/Music/loops/kick.wav`
+- When `makeRef` runs
+- Then the anchor matches and the relative path has the same components `loops` and `kick.wav`
+
+#### Scenario: POSIX path matches case-sensitively [Catch2]
+- Given the anchor `/home/a/Music` and the paths `/home/a/Music/kick.wav` and `/home/a/music/kick.wav`
+- When `makeRef` runs on each
+- Then the first path matches the anchor with relative path `kick.wav`, and the second has no anchor
+
+#### Scenario: Backslash is a filename character on POSIX [Catch2]
+- Given the POSIX path `/home/a/Music/we\ird.wav`
+- When `makeRef` runs
+- Then the name is `we\ird.wav` and the relative path is `we\ird.wav`
+
+#### Scenario: Dot-dot path gets no anchor [Catch2]
+- Given the anchor `C:\Users\a\Music` and the path `C:\Users\a\Music\..\Other\kick.wav`
+- When `makeRef` runs
+- Then the reference has no anchor and no relative path, and its name is `kick.wav`
+
+#### Scenario: Name extraction across path shapes [Catch2]
+- Given `C:\x\kick.wav`, `\\srv\sh\kick.wav`, `/x/kick.wav`, and `kick.wav`
+- When names are extracted via `makeRef`
+- Then each name is `kick.wav`
+
+#### Scenario: Candidate order is anchor, absolute, then search directories [Catch2]
+- Given a reference with anchor `music`, relative path `loops/kick.wav`, and absolute path `C:\old\kick.wav`; this machine's `music` anchor is `D:\Music`; search directories `E:\a` and `E:\b`
+- When `candidates` runs
+- Then the list is `D:\Music\loops\kick.wav`, `C:\old\kick.wav`, `E:\a\kick.wav`, `E:\b\kick.wav`, in that order
+
+#### Scenario: Missing anchor on this machine is skipped [Catch2]
+- Given a reference with anchor `music` and this machine's anchors lacking `music`
+- When `candidates` runs
+- Then the list starts with the stored absolute path
+
+#### Scenario: Duplicates are removed keeping first position [Catch2]
+- Given a reference whose anchor-joined path equals its absolute path, and a search directory that contains that file's own directory
+- When `candidates` runs
+- Then each distinct path appears once, at its first position
+
+#### Scenario: Dedup treats Windows paths case-insensitively [Catch2]
+- Given candidates `C:\Music\Kick.wav` and `c:\music\kick.wav`
+- When `candidates` deduplicates
+- Then only the first remains
+
+#### Scenario: Candidate list is capped [Catch2]
+- Given a reference and 20 distinct search directories
+- When `candidates` runs
+- Then the list holds exactly 10 entries and the entries kept are the first 10 in order
+
+#### Scenario: Search directory trailing separator [Catch2]
+- Given the search directory `E:\a\` and `E:\a`
+- When `candidates` runs with both
+- Then exactly one `E:\a\kick.wav` entry appears
+
+#### Scenario: Unsafe stored name or relative path is ignored [Catch2]
+- Given a reference with anchor `music`, absolute path `C:\old\kick.wav`, and either relative path `../../kick.wav` with name `..`, or name `x\kick.wav`; this machine's `music` anchor is `D:\Music`; search directory `E:\a`
+- When `candidates` runs
+- Then no anchor candidate is produced and the list is `C:\old\kick.wav` then `E:\a\kick.wav` (the name derived from the absolute path is used)
+
+#### Scenario: Backslash or colon never escapes a Windows directory [Catch2]
+- Given a POSIX-shaped reference `/old/x.wav` whose relative path is `a\..\..\x` under anchor `music`=`D:\Music`, a POSIX name `..\..\x.wav` with search directories `E:\a` and `/m`, and a name `a:b.wav` with search directories `E:\a` and `/m`
+- When `candidates` runs on each
+- Then no candidate is joined onto `D:\Music` or `E:\a`, while the POSIX directory `/m` still receives the name unchanged
+
+#### Scenario: Resolve returns the first existing candidate [Catch2]
+- Given candidates A, B, C and a fake predicate that is true for B and C
+- When `resolve` runs
+- Then it returns B with index 1, and the predicate was not called on C
+
+#### Scenario: Resolve reports not found [Catch2]
+- Given candidates A and B and a predicate that is always false
+- When `resolve` runs
+- Then the result is not-found, and the predicate was called on A then B
+
+#### Scenario: Resolve on an empty list [Catch2]
+- Given an empty candidate list
+- When `resolve` runs
+- Then the result is not-found and the predicate is never called
+
+#### Scenario: Empty and garbage input does not fail [Catch2]
+- Given an empty string, a string of only separators, a string with embedded NUL or control characters, and a very long path
+- When `makeRef`, `candidates`, and `resolve` run on each
+- Then no call throws or reads out of bounds; an empty path yields an empty name, no anchor, and an empty candidate list
+
+### R-SS-13 Legacy state compatibility
+Restoring state that holds `samplePath` but neither `sampleName` nor the anchor fields MUST behave as a reference built from that absolute path alone: the name MUST be derived from `samplePath` (splitting on both `\` and `/` according to the path's shape), no anchor MUST be assumed, and the candidate list MUST be the absolute path followed by the name in each search directory. Restoring state with an empty or absent `samplePath` MUST behave per R-SS-9 (empty path), regardless of any other reference fields.
+
+#### Scenario: Legacy reference derives the name [Catch2]
+- Given a reference built from only `C:\old\kick.wav`
+- When `candidates` runs with search directory `E:\a`
+- Then the list is `C:\old\kick.wav` then `E:\a\kick.wav`
+
+#### Scenario: Legacy state with a moved file [Manual]
+- Given old-format state whose `samplePath` no longer exists but whose file name exists in a search directory
+- When state is restored
+- Then the file loads and the label reads "Loaded: <name> (relocated)"
+
+#### Scenario: Stray fields with empty path [Manual]
+- Given state with an empty `samplePath` and a non-empty `sampleName`
+- When state is restored
+- Then output is silent and the label reads "No sample"
+
+### R-SS-14 Candidate loading and relocated status
+The loader MUST accept an ordered candidate list for a request and MUST load the first candidate that exists, probing sequentially on the loader thread only (never the audio or message thread). The load result MUST report the path actually loaded. A user load MUST use a single-entry list. The generation gate, locking, atomic commit, and clear semantics of R-SS-7, R-SS-9, and R-SS-11 MUST be unchanged by the candidate list. When a Restore loads any candidate other than the stored absolute path (the anchor-joined path on this machine, when it differs from the stored path, or a search-directory path), the status label MUST read "Loaded: <name> (relocated)", where `<name>` is the file name; a Restore that loads the stored absolute path MUST NOT show "(relocated)". The label MUST read "No sample" only when the stored `samplePath` is empty. Otherwise, when the candidate list is empty or no candidate exists or loads, behavior MUST be that of R-SS-9: the source is cleared, the stored reference is kept unchanged, and the label reads "Missing: <name>", where `<name>` is the stored `sampleName`, else the name derived from `samplePath`, else the stored `samplePath` itself. The search directories (R-SS-8) are the four anchor directories, searched non-recursively. A relocated Restore MUST NOT modify the stored reference. The "(relocated)" text and the truncation text of R-SS-10 MUST both appear when both apply.
+
+#### Scenario: Relocated by anchor [Manual]
+- Given a sample under the user's Music folder saved on one account, and the same relative layout under a different account's Music folder
+- When state is restored on the second account
+- Then the sample loads from the new location and the label reads "Loaded: <name> (relocated)"
+
+#### Scenario: Moved parent folder reloads with hint [Manual]
+- Given a project saved with a sample in a subfolder of Documents, then the sample file moved directly into another anchor folder (for example directly into Music)
+- When state is reloaded
+- Then the sample loads and the label reads "Loaded: <name> (relocated)"
+
+#### Scenario: Nested subfolder is not searched [Manual]
+- Given a project saved with a sample in a subfolder of Documents, then the sample file moved into a nested subfolder of another anchor folder (for example `Music/new/`)
+- When state is reloaded
+- Then the name search does not find it, output is silent, and the label reads "Missing: <name>"
+
+#### Scenario: Unmoved file shows no hint [Manual]
+- Given state whose stored absolute path still exists
+- When state is restored
+- Then the label reads "Loaded: <name>" with no "(relocated)"
+
+#### Scenario: Missing file label unchanged [Manual]
+- Given state whose file exists at no candidate
+- When state is restored
+- Then output is silent, the label reads "Missing: <name>", and re-saving state keeps the same stored reference
+
+#### Scenario: Relocated restore does not rewrite state [Manual]
+- Given a relocated restore has loaded from a new path
+- When state is saved again with no new user load
+- Then the stored `samplePath`, `sampleName`, `sampleAnchor`, and `sampleRel` equal the values that were restored
+
+#### Scenario: Superseded candidate load does not publish [Manual]
+- Given a restore with several candidates in progress and the user requests another file
+- When both requests finish
+- Then only the user's file is active, and the restore neither published nor cleared the source
+
+#### Scenario: Relocated and truncated together [Manual]
+- Given a relocated restore of a file longer than 5 minutes
+- When it loads
+- Then the label shows the name with both "(relocated)" and "(truncated to 5 min)"
+
+### R-SS-15 Loader target rate and rate-change reload
+The loader MUST accept a target rate for each request, captured at request time, and the published `SampleBuffer::sampleRate()` MUST equal that target rate. Resampling MUST run on the loader thread only, MUST check request currency (the generation gate) between chunks, and a superseded request MUST abort without publishing or clearing. A request issued before any target rate is known (a restore before the first `prepareToPlay`) MUST publish the file at its own rate (passthrough). The decode buffer MUST be released as soon as resampling ends. When a reload is requested for a rate change the loader MUST re-decode the file from disk; if the file can no longer be read, the currently published buffer MUST stay active, nothing MUST be published or cleared, and the label MUST NOT read "Missing". The status label rules of R-SS-10 and R-SS-14 are unchanged.
+
+#### Scenario: Published rate equals target [Manual]
+- Given a 96 kHz wav and a host at 44.1 kHz
+- When the file is loaded
+- Then the published source reports 44100 Hz and the file plays at its original pitch and duration
+
+#### Scenario: Restore before prepare publishes at file rate [Manual]
+- Given state with a 96 kHz sample restored before the first `prepareToPlay`
+- When the restore completes
+- Then the source is published at 96000 Hz, plays, and the first `prepareToPlay` at 48000 Hz triggers one reload to 48000 Hz
+
+#### Scenario: Restore before prepare, rates equal [Manual]
+- Given a 48 kHz sample restored before the first `prepareToPlay` at 48000 Hz
+- When `prepareToPlay` runs
+- Then no reload is requested
+
+#### Scenario: Superseded resample aborts [Manual]
+- Given a long file being resampled and a newer load request issued
+- When the older request next checks currency
+- Then it aborts, publishes nothing, clears nothing, and the newer file becomes active
+
+#### Scenario: File gone on rate-change reload [Manual]
+- Given a published buffer at 44100 Hz whose file has been deleted
+- When the host rate changes to 48000 Hz
+- Then the 44100 Hz buffer keeps playing, nothing is cleared, and the label does not read "Missing"
+
+#### Scenario: Peak memory released [Manual]
+- Given a 5 minute stereo 192 kHz file loaded at a 48 kHz target
+- When the load finishes
+- Then the decode buffer has been freed and only the 48 kHz source remains
+
 ## Out of scope (explicit)
-Waveform display, custom parameter UI, recent files, relative-path lookup, embedded audio in state, load-time resampling, MIDI control, lookahead limiting and any user-adjustable output ceiling or drive.
+Waveform display, custom parameter UI, recent files, embedded audio in state, dropping `samplePath` from state, a content hash or file-size check, a persisted last-used directory, rewriting state after a relocated restore, a Downloads anchor, recursive directory search, runtime (pitch-shift) aliasing fixes, keeping the original decode in RAM, user-adjustable resampler quality, MIDI control, lookahead limiting and any user-adjustable output ceiling or drive.
