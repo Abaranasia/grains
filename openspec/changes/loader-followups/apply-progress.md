@@ -1,6 +1,6 @@
 # Apply progress: loader-followups (PR-A, Phases 1-3)
 
-Mode: Strict TDD. Status: PR-A complete (12/12 tasks); PR-B (Phases 4-6) not started.
+Mode: Strict TDD. Status: PR-A complete (12/12 tasks); PR-B (Phases 4-6) complete (tasks 4.1-6.3; 6.2 not triggered).
 
 ## Tasks
 - [x] 1.1-1.5 LoadPlanner (header, cpp, CMake, request/take/retarget/published/cleared)
@@ -39,3 +39,51 @@ Mode: Strict TDD. Status: PR-A complete (12/12 tasks); PR-B (Phases 4-6) not sta
 - Rejected: not bumping the gate (breaks supersede/abort semantics); processor-side status-neutral Reload (touches PluginProcessor, untestable); settle returning info for the adapter to re-post (more plumbing, same effect).
 - Tests: 25 `[loadplan]` cases (2 new); full ctest 218/218 Debug and Release; /W4 /WX clean; `GrainsPlugin_Standalone` builds Debug and Release.
 - Not unit-testable (JUCE-only: `lastText_` capture, Reload success posting `r.label`): manual check D.6 -- with the host rate differing from a loaded file's rate, load a missing/corrupt file via the UI; the status must stay "Error: <name>" (not "Loaded: <previous>") and the previous sample keeps playing at the target rate.
+
+## PR-B (Phases 4-6)
+
+- [x] 4.1 perf cases; [x] 4.2 resampler OOM; [x] 5.1-5.3 fault injection and planner OOM; [x] 6.1 triggered; [ ] 6.2 not triggered; [x] 6.3 final ctest
+
+### Perf (Release, MSVC, reference machine, 300 s stereo noise)
+- 96k to 44.1k: 5.44 s and 5.43 s (two runs); budget 6 s, passes with about 10% margin. Contingency 6.2 NOT triggered.
+- 384k to 44.1k: 20.40 s (informational, WARN only, no budget).
+- 96k to 48k (existing case): 2.80 s (budget 3 s).
+- The 96k to 44.1k case is close to the limit; a slower host could exceed it. It is hidden `[.][perf]` and not part of the CI gate.
+
+### TDD evidence
+- 4.2: the test passed on first run (the production code already maps bad_alloc to OutOfMemory; no hook, ratio 1e12 is accepted for upsampling and the default frame limit is SIZE_MAX, so no spec adjustment was needed). Mutation proof: `result.status = OutOfMemory` changed to `InvalidArgument` -> test failed (2 assertions); reverted, `git diff Source/` empty.
+- 5.1 RED: `test_alloc_failure.cpp` and the new executable added before the hook: compile errors C2039/C3861 (`armFailure`, `disarmFailure`, `failureFired` not members of grains_test).
+- 5.2 GREEN: hook added; Release: 5 cases / 182 assertions pass. First run showed a test bug (settle's `std::string` argument copy was made inside the armed window and threw in the caller); fixed by building and moving the string before arming.
+- 5.3: planner retarget (in-flight and published branches) and settle (R4-001 Reload) sweeps pass against existing planner code (its try/catch already satisfies the spec); no production change.
+- `disarmFailure()` keeps `failureFired()` (cleared only by `armFailure`), so tests read the flag after disarming.
+
+### Contingency 6.1 (triggered)
+In MSVC Debug the builder, planner-retarget and planner-settle sweeps terminate the process (exit 3, no Catch output) at the first allocation failure inside a `noexcept` container move (hypothesis: debug-runtime iterator proxy allocation; not isolated further). They are compiled out under `_MSC_VER && _DEBUG` via `GRAINS_ALLOC_SWEEPS` in `tests/test_alloc_failure.cpp`; the 2 `armFailure` cases run in Debug. Release runs all 5. Design Open Question closed.
+
+### Test counts
+- Debug: ctest 220/220 (218 + 2 armFailure cases; the OOM case is gated out in Debug). Release: 224/224 (also the 3 sweep cases). /W4 /WX clean in both, full build.
+- grains_tests links neither `AllocationCounter.cpp` nor the hook (only `grains_realtime_tests` and `grains_alloc_failure_tests` do).
+
+### Files (PR-B)
+- Modified: `tests/test_resampler.cpp` (+43), `tests/support/AllocationCounter.{h,cpp}` (+9, +32), `tests/CMakeLists.txt` (+11); `design.md`, `tasks.md`
+- New: `tests/test_alloc_failure.cpp` (213)
+- Changed lines: about 308 added, 0 removed (estimate was ~195: the sweeps, helper builders and the guard comment are larger than forecast). Production code untouched.
+
+### Deviations
+- Added two `armFailure` self-tests (nth-fails-once, unarmed counts) from the R-BH-6 scenarios.
+- R-RS-9 numbers are recorded here rather than in the spec file.
+
+## PR-B review remediation (resampler OOM test)
+- Problem: the 1e12 resampler OOM test requests about 4 PB; ASan's throwing `operator new` is fatal on failure even with `allocator_may_return_null=1`, so the Linux ASan job could abort. The ci.yml `ASAN_OPTIONS` change was reverted (`git diff HEAD -- .github` empty).
+- Moved the case to `tests/test_alloc_failure.cpp` as a fail-nth sweep over `grains::resample` (mono and stereo, 48k to 44.1k, 1000 frames): fired run gives `OutOfMemory`, no channels, `allocs == frees`; first unfired run gives `Ok`; plus the pairwise-distinct status check. Removed the old test from `tests/test_resampler.cpp`.
+- MSVC Debug: probed a first (ungated) version; it hung at n = 1 (iterator proxy allocation in a noexcept vector constructor reaches `std::terminate`), so the case is gated by `GRAINS_ALLOC_SWEEPS` like the other sweeps. It does NOT run in Debug.
+- Mutation proof (Release): `result.status = OutOfMemory` changed to `InvalidArgument` in `Resampler.cpp` -> resampler and builder sweeps failed (2 test cases); reverted, `cmp` byte-identical, `git diff HEAD -- Source` empty.
+- Fixed the stale `tests/CMakeLists.txt` comment about the Windows job.
+- Counts: ctest Debug 220/220, Release 224/224; `grains_alloc_failure_tests` direct: Debug 2 cases / 5 assertions, Release 6 cases / 224 assertions. /W4 /WX clean. No `armFailure`/`failureFired` in `grains_tests.exe` (Debug, Release).
+
+
+### PR-B review remediation (elision hazard)
+- Finding: the `armFailure` self-tests used `delete new int(i)` / `delete[] new char[8]`. C++14 allows eliding a new/delete pair even with a replaced operator new; clang and gcc do so at -O1+, so an optimized non-MSVC build would see no allocation reach the hook (thrown==0, count()==0). Committed CI (Linux -O0, MSVC) was unaffected.
+- Fix (`tests/test_alloc_failure.cpp` only): `observedNewDelete` / `observedNewDeleteArray` publish the pointer through a `void* volatile` sink before deleting, so the allocation is observable and cannot be elided. Assertions unchanged.
+- TDD: RED not demonstrable locally. MSVC does not elide, and no clang/gcc/WSL toolchain is installed on this machine (docker-desktop WSL distro only), so the -O2 before/after compile was not run. Justified by the standard rule ([expr.new]) and the volatile store being a required side effect that depends on the pointer.
+- Verification: see final report (Debug 220/220, Release 224/224, /W4 /WX clean).
