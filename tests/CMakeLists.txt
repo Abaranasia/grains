@@ -48,7 +48,9 @@ add_executable(grains_tests
   test_sample_builder.cpp
   test_resampler.cpp
   test_load_planner.cpp
-  test_sample_path_resolver.cpp)
+  test_sample_path_resolver.cpp
+  test_waveform_geometry.cpp
+  test_waveform_peaks.cpp)
 target_include_directories(grains_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(grains_tests PRIVATE grains_core Catch2::Catch2WithMain Threads::Threads)
 grains_set_warnings(grains_tests)

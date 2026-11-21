@@ -7,6 +7,7 @@
 #include <grains/LoadPlanner.h>
 #include <grains/Resampler.h>
 #include <grains/SampleBuilder.h>
+#include <grains/WaveformPeaks.h>
 
 #include <support/AllocationCounter.h>
 
@@ -230,6 +231,45 @@ TEST_CASE("builder: every nth allocation failure gives OutOfMemory or success", 
                                {"48k to 44.1k mono", 1, 48000.0, 44100.0},
                                {"48k to 44.1k stereo", 2, 48000.0, 44100.0}};
     for (const auto& c : cases) CHECK(sweep(c) > 1);
+}
+
+// R-WD-3 / D3: makeWaveformPeaks is noexcept and returns nullptr when an allocation fails. Every
+// allocation it makes (the result object, the bucket vector) fails once; a fired run must return
+// null with no leak, and the run the failure misses must return all N buckets.
+TEST_CASE("peaks: every nth allocation failure returns null, never throws", "[allocfail][waveform]")
+{
+    const std::vector<float> left(1000, 0.25f), right(1000, -0.5f);
+    const ChannelView view[] = {{left.data(), left.size()}, {right.data(), right.size()}};
+    constexpr std::size_t kBuckets = 64;
+    bool completed = false;
+    for (std::size_t n = 1; n < 100 && !completed; ++n) {
+        bool fired = false, hadResult = false;
+        std::size_t bucketCount = 0, allocs = 0, frees = 0;
+        {
+            grains_test::AllocationScope scope;
+            grains_test::armFailure(n);
+            {
+                const auto r = grains::makeWaveformPeaks(view, 2, kBuckets);
+                grains_test::disarmFailure(); // before any assertion, which allocates
+                fired = grains_test::failureFired();
+                hadResult = r != nullptr;
+                bucketCount = r ? r->buckets.size() : 0;
+            }
+            allocs = scope.count();
+            frees = scope.frees();
+        }
+        grains_test::disarmFailure();
+        INFO("n=" << n);
+        REQUIRE(allocs == frees);
+        if (!fired) {
+            REQUIRE(hadResult);
+            REQUIRE(bucketCount == kBuckets);
+            completed = true;
+            continue;
+        }
+        REQUIRE_FALSE(hadResult);
+    }
+    REQUIRE(completed);
 }
 
 TEST_CASE("planner: retarget under allocation failure issues nothing", "[allocfail]")
