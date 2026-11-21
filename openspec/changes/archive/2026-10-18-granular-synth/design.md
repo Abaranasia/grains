@@ -14,7 +14,7 @@ Additive CMake build next to the untouched Projucer files. `grains_core` is a JU
 | Plugin option | stub target vs fail | **`GRAINS_BUILD_PLUGIN=OFF`**. `ON` stops with `FATAL_ERROR "roadmap #1"` so nobody gets a half-built plugin |
 | Interpolator | virtual call per sample vs static policy | **Static policy struct** (`LinearInterpolator::read`), render loop templated on it, `InterpolationMode` enum checked once per block. Adding Hermite later = new struct + enum value. Virtual calls rejected because they cost a call per sample |
 | Rng | `std::mt19937` + distributions (output differs between standard libraries) vs own PCG32 | **Own PCG32**, concrete type passed by reference (injectable, no virtual) |
-| Scheduling | spawn everything, then render vs event-ordered segments | **Event-ordered**: render active grains up to the next spawn offset, release finished grains, spawn, continue. Pool-full behavior then does not depend on block size |
+| Scheduling | spawn everything, then render vs event-ordered segments | **Event-ordered**: render active grains up to the next spawn offset, release finished grains, spawn, continue. Pool-full behavior then does not depend on block size. *Superseded by A4 (see Implementation amendments): spawns are rendered inside the scheduler callback; there is no offset list.* |
 | Overflow | steal oldest vs skip | **Skip** (confirmed). The scheduler still advances, so timing is unchanged |
 | Normalization | active-count `1/√N` (needs smoothing, pumps) vs from params | **`1/√max(1, density·sizeSec)`, fixed per grain at spawn**. Deterministic, no zipper noise on parameter changes |
 | Boundaries | wrap / zero-pad / truncate vs shrink grain | **Shrink grain length to the available source span** (`len·rate`) before the window is computed, so every window completes (D1 confirmed). Roadmap #8 playback modes (wrap/loop, reverse, random position) must remain addable via the read/interpolator interface without rewriting the engine |
@@ -28,6 +28,8 @@ Additive CMake build next to the untouched Projucer files. `grains_core` is a JU
                                                   │              │
     SampleBuffer (const*) ←─Interp::read── render grain × WindowTable(Hann LUT) × gains
                                                   └──→ overlap-add into L/R
+
+> Superseded by A4 (see Implementation amendments): the scheduler does not emit a list of spawn offsets; the engine renders segments inside the `GrainScheduler::advance` callback.
 
 Sample rate: `rate = 2^(st/12) · sourceSR / engineSR`; `prepare()` resets all state.
 
@@ -82,7 +84,11 @@ class GranularEngine { public: void prepare(double sr, uint64_t seed); // may al
 
 **Scheduler**: `samplesUntilNext` is a double. Each interval is `T·(1 + j·bipolar())` with T = sr/density, floored at 1 sample. Spawn offset = `floor`. Each block subtracts an integer count, which is exact for these magnitudes, so the timing does not change when blocks are split differently. The Rng is only called at spawn.
 
+> Superseded by A1, A2 and A3 (see Implementation amendments): the scheduler tracks absolute time (`double nextTime_`, `int64 blockStart_`) instead of `samplesUntilNext`; it draws `bipolar()` exactly once per spawn, also at jitter 0; density 0 freezes the next spawn time.
+
 **Spawn bounds**: clamp start to [0, frames−1]. Then `len = min(req, floor((frames−1−start)/rate))`. If `len < 2`, move start back to fit `2·rate`; if the source is still too short, skip the spawn. Linear reads of `i` and `i+1` therefore always stay ≤ frames−1.
+
+> Confirmed as built by A15 (see Implementation amendments).
 
 **Pan**: equal-power `cos/sin`, computed once at spawn. A mono source feeds both channels.
 
@@ -108,6 +114,43 @@ No migration required. Purely additive; Projucer files stay until roadmap #1.
 
 **Line forecast**: core about 600 lines (headers 300, src 300), CMake about 90, tests about 450, so roughly **1100 lines**, above the 800 budget. Suggested chain: PR1 = harness + SampleBuffer/WindowTable/Rng/Pool/Scheduler + tests (about 550); PR2 = Interpolator/Params/Engine + engine tests (about 550).
 
+> Superseded by A14 (see Implementation amendments): delivered as six slices (PR1, PR2, PR3a, PR3b, PR4a, PR4b).
+
 ## Open Questions
 
 - [ ] Add `CMakePresets.json`? The VS2026 generator needs a recent CMake. Default: none; use the Ninja or VS generator documented in the README later.
+
+## Implementation amendments
+
+Recorded at archive time (2026-10-18) from the as-built code at `1e58e1e`. The sections above remain the original plan; where they differ, this section is authoritative.
+
+| # | As-built decision | Rationale |
+|---|---|---|
+| A1 | Scheduler tracks absolute `double` time plus an `int64` block start; offset = `floor(nextTime) - blockStart`. | Gives bit-identical block-split invariance (R-GS-2, R-GR-6), because the per-block subtraction stays exact. |
+| A2 | Exactly one `bipolar()` RNG draw per spawn, even when timing jitter is 0. | Keeps the RNG sequence aligned with spawn count, so the random stream does not depend on whether jitter is active (R-GS-5). |
+| A3 | At density 0 the scheduler spawns nothing but still advances its block start every block; only the next spawn time is frozen. When density becomes non-zero again, a next spawn time that lies in the past is clamped forward to the current block start, so there is no backlog burst and the first spawn after re-enabling lands at offset 0 of that block. | Re-enabling density must not release a burst of backlog spawns. |
+| A4 | The engine renders grains interleaved inside the `GrainScheduler::advance` callback; there is no per-block offset buffer. | Spawns per block are not bounded by a small constant (density up to 1000 gr/s over large blocks), so a fixed buffer would need an arbitrary cap. Interleaving keeps memory fixed. |
+| A5 | Three RNG draws per spawn (position, pitch, pan), taken before any bounds check or pool-full skip. | A skipped spawn must leave the random sequence of later spawns unchanged (R-GS-6). |
+| A6 | Final semitones (pitch + pitch jitter) are clamped to ±24 after jitter is applied. The output is bounded the same way in a final pass over each block: every sample that is NaN or has \|x\| < 1e-20 (`kFlushThreshold`) is flushed to 0.0, then the result is clamped to ±4 (`kOutputCeiling`). | Keeps the playback rate within the documented range (R-GR-7) even when pitch and jitter are both at their limits, and keeps the output finite, denormal-free and within the R-GR-7 ceiling. |
+| A7 | `setSource()` resets the grain pool. | Prevents grains from holding read positions into a previously set source. The engine keeps only a non-owning pointer. |
+| A8 | A null or empty source yields exact `0.0` output and does not advance the scheduler; the schedule resumes when a source is set. | Silence without a source needs no held state. The behaviour is explicit so tests can pin it. |
+| A9 | `EngineParams::clamped()` holds all range clamping; `setParams()` calls it. | One place for limits, testable without an engine instance. |
+| A10 | `GranularEngine::activeGrainCount() const noexcept` is a read-only accessor. | Lets tests assert pool saturation and active grains without reaching into internals. |
+| A11 | The global `operator new`/`delete` replacement (`AllocationCounter`) lives in a separate `grains_realtime_tests` executable. | Replacing global operators in the main test binary would count Catch2 and unrelated test allocations. |
+| A12 | Catch2 is fetched pinned by commit SHA (v3.8.1 = `2b60af89e23d28eefc081bc930831ee9d45ea58b`). `GRAINS_USE_SYSTEM_CATCH2=ON` is an explicit opt-in to an installed Catch2 3.x. | A moved tag cannot change the build; an installed Catch2 is never picked up implicitly. |
+| A13 | The JUCE-free link guard (`grains_assert_juce_free`) is deferred with `cmake_language(DEFER DIRECTORY)` and inspects `LINK_LIBRARIES` and `INTERFACE_LINK_LIBRARIES` recursively. | Links added after the target is created must still be checked. An immediate check was a no-op at the point it ran (PR1 review finding). |
+| A14 | Delivery split: PR3 is delivered as PR3a (`feat/granular-synth-03a-render`, `f33d347`) and PR3b (`feat/granular-synth-03b-engine`, `4e47e19`); PR4 as PR4a (`feat/granular-synth-04a-hardening`, `365cde1`) and PR4b (`feat/granular-synth-04b-realtime`, `1e58e1e`). | Each slice must stay within the 800-line review budget (forecast target under 400 lines per slice) and independently green under `ctest`. |
+| A15 | Spawn bounds as built match the original "Spawn bounds" rule: start = position × (frames−1), with position clamped to [0, 1]; `len = min(requested, floor((frames−1−start)/rate))`; if `len < 2`, start moves back to `frames−1−2·rate` and `len = 2`; if that start is below 0 (source too short), the spawn is skipped. The three RNG draws (A5) are taken before this check. | Every window completes over the shrunk length, and linear reads stay within the source (R-GR-3). |
+
+### Known limitations
+
+The same set is listed in `verify-report.md` and `archive-report.md`.
+
+1. **Coherent DC clipping.** A constant-1 source at density 200, size 1000 ms, gain 2 produces a pre-clamp peak of about 9.3 (about 4.6 at gain 1). The output is hard-clipped at ±4. This is R-GR-7 compliant (4.0 is the documented ceiling) but audible as distortion on DC-like material. A soft limiter is deferred to the plugin stage (roadmap #1), not an engine change. Test 70 pins this behaviour.
+2. **Allocation counter scope.** `AllocationCounter` replaces the global `operator new`/`new[]` (and aligned forms) only. Direct `malloc`/`calloc` or third-party allocators are not counted.
+3. **Realtime extremes test** does not assert that grains are active per combination; pool saturation is asserted only in the dedicated pool-full test.
+4. **JUCE-free guard scope.** `grains_assert_juce_free` inspects only `LINK_LIBRARIES` and `INTERFACE_LINK_LIBRARIES` of `grains_core` (recursively), not include paths or sources. It was verified by a temporary mutation, not by a permanent test.
+5. **Extremes grid duration.** Each combination runs 0.25 s instead of the 1 s in the R-GR-7 scenario. The pool saturates at about 0.13 s, so the worst case is reached.
+6. **Weak R-GR-7 coverage.** Sample-rate grain-length scaling and the pitch +100 == +24 identity at engine level are only weakly covered (the latter is proven at params level).
+7. **Determinism scope.** Bit-identical output holds per binary, compiler, and flags. Cross-compiler output is not guaranteed (design, Determinism).
+8. **No sanitizer or coverage runs.** R-GR-3 out-of-bounds safety is evidenced by guarded buffers and exact-value tests, not by ASan/UBSan. No coverage tool was run.

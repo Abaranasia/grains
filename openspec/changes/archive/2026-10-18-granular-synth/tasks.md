@@ -54,47 +54,47 @@ User decisions (2026-10-17), all RESOLVED:
 
 ## PR1: Harness, limits, window, rng
 
-- [ ] 1.1 RED: `tests/CMakeLists.txt` (Catch2 v3.8.1 FetchContent, `catch_discover_tests`), `tests/test_harness.cpp`; configure fails (no root CMake)
-- [ ] 1.2 GREEN: root `CMakeLists.txt` (3.25, C++17, `GRAINS_BUILD_PLUGIN=OFF`, ON = FATAL_ERROR), `cmake/GrainsWarnings.cmake`, `.gitignore` `build/`; ctest green (R-BH-1, R-BH-2)
-- [ ] 1.3 Verify R-BH-2: temporary `REQUIRE(false)` makes ctest non-zero and names the case; revert
-- [ ] 1.4 Add configure-time check in `Source/core/CMakeLists.txt`: fail if `grains_core` links any `juce*` target
-- [ ] 1.5 RED: `tests/test_params_limits.cpp` (clamp ranges, NaN to default, density 0 off, sr clamp)
-- [ ] 1.6 GREEN: `Source/core/include/grains/ParamLimits.h`; create `grains_core` STATIC
-- [ ] 1.7 RED: `tests/test_window.cpp` (R-GR-1: endpoints 0, centre ~1, symmetry, 1000 random phases within 1e-3 of Hann)
-- [ ] 1.8 GREEN: `WindowTable.{h,cpp}` (4096-entry Hann, interpolated `at`)
-- [ ] 1.9 RED: `tests/test_rng.cpp` (same seed identical, different seed differs, `uniform01` in [0,1), `bipolar` in [-1,1], reseed)
-- [ ] 1.10 GREEN: `Rng.h` (PCG32, no globals)
-- [ ] 1.11 Update `openspec/config.yaml`: `runner: ctest`, `layers.unit: true` (R-BH-4); REFACTOR warnings clean under /W4 /WX
+- [x] 1.1 RED: `tests/CMakeLists.txt` (Catch2 v3.8.1 FetchContent, `catch_discover_tests`), `tests/test_harness.cpp`; configure fails (no root CMake)
+- [x] 1.2 GREEN: root `CMakeLists.txt` (3.25, C++17, `GRAINS_BUILD_PLUGIN=OFF`, ON = FATAL_ERROR), `cmake/GrainsWarnings.cmake`, `.gitignore` `build/`; ctest green (R-BH-1, R-BH-2)
+- [x] 1.3 Verify R-BH-2: temporary `REQUIRE(false)` makes ctest non-zero and names the case; revert
+- [x] 1.4 Add configure-time check in `Source/core/CMakeLists.txt`: fail if `grains_core` links any `juce*` target
+- [x] 1.5 RED: `tests/test_params_limits.cpp` (clamp ranges, NaN to default, density 0 off, sr clamp)
+- [x] 1.6 GREEN: `Source/core/include/grains/ParamLimits.h`; create `grains_core` STATIC
+- [x] 1.7 RED: `tests/test_window.cpp` (R-GR-1: endpoints 0, centre ~1, symmetry, 1000 random phases within 1e-3 of Hann)
+- [x] 1.8 GREEN: `WindowTable.{h,cpp}` (4096-entry Hann, interpolated `at`)
+- [x] 1.9 RED: `tests/test_rng.cpp` (same seed identical, different seed differs, `uniform01` in [0,1), `bipolar` in [-1,1], reseed)
+- [x] 1.10 GREEN: `Rng.h` (PCG32, no globals)
+- [x] 1.11 Update `openspec/config.yaml`: `runner: ctest`, `layers.unit: true` (R-BH-4); REFACTOR warnings clean under /W4 /WX
 
 ## PR2: SampleBuffer, pool, scheduler
 
-- [ ] 2.1 RED: `tests/test_sample_buffer.cpp` (mono/stereo accessors, immutable, empty, 1-frame)
-- [ ] 2.2 GREEN: `SampleBuffer.{h,cpp}`
-- [ ] 2.3 RED: `tests/test_pool.cpp` (capacity 128, acquire returns nullptr when full, release reuse, index-order `forEachActive`, reset)
-- [ ] 2.4 GREEN: `Grain.h` (struct only), `GrainPool.h`
-- [ ] 2.5 RED: `tests/test_scheduler.cpp`: periodic 100 gr/s gives 100 spawns 480 apart; D=70 over 10 s within +-1 sample of k*fs/D; D=0 none; offsets in [0,B); first spawn at 0 (R-GS-1, R-GS-3)
-- [ ] 2.6 RED: same file: block-split invariance (1, 64, 1-sample, irregular); jitter 0 ignores seed; same seed identical, seeds 1/2 differ; jitter=1 mean within 5% over 20 seeds x 60 s; monotonic; clamp extremes D=-5/1e9/NaN, jitter -1/7 (R-GS-2, 4, 5, 7)
-- [ ] 2.7 GREEN: `GrainScheduler.{h,cpp}` (double accumulator, `T*(1+j*bipolar())` floored at 1, floor offset, uses ParamLimits)
-- [ ] 2.8 RED+GREEN: skip-on-full schedule test: capacity 128 vs unlimited gives identical due-times; freed slot is reused (R-GS-6)
-- [ ] 2.9 REFACTOR: shared test helpers in `tests/support/`
+- [x] 2.1 RED: `tests/test_sample_buffer.cpp` (mono/stereo accessors, immutable, empty, 1-frame)
+- [x] 2.2 GREEN: `SampleBuffer.{h,cpp}`
+- [x] 2.3 RED: `tests/test_pool.cpp` (capacity 128, acquire returns nullptr when full, release reuse, index-order `forEachActive`, reset)
+- [x] 2.4 GREEN: `Grain.h` (struct only), `GrainPool.h`
+- [x] 2.5 RED: `tests/test_scheduler.cpp`: periodic 100 gr/s gives 100 spawns 480 apart; D=70 over 10 s within +-1 sample of k*fs/D; D=0 none; offsets in [0,B); first spawn at 0 (R-GS-1, R-GS-3)
+- [x] 2.6 RED: same file: block-split invariance (1, 64, 1-sample, irregular); jitter 0 ignores seed; same seed identical, seeds 1/2 differ; jitter=1 mean within 5% over 20 seeds x 60 s; monotonic; clamp extremes D=-5/1e9/NaN, jitter -1/7 (R-GS-2, 4, 5, 7)
+- [x] 2.7 GREEN: `GrainScheduler.{h,cpp}` (double accumulator, `T*(1+j*bipolar())` floored at 1, floor offset, uses ParamLimits)
+- [x] 2.8 RED+GREEN: skip-on-full schedule test: capacity 128 vs unlimited gives identical due-times; freed slot is reused (R-GS-6)
+- [x] 2.9 REFACTOR: shared test helpers in `tests/support/`
 
 ## PR3: Interpolator, grain render, engine
 
-- [ ] 3.1 RED: `tests/test_interpolator.cpp` (exact at integers, midpoints, last-sample read stays in range, no OOB under guarded buffer)
-- [ ] 3.2 GREEN: `Interpolator.h` (`LinearInterpolator`, `InterpolationMode`, index clamp guard)
-- [ ] 3.3 RED: `tests/test_grain_render.cpp`: unity pitch equals `window(n/256)*src[1000+n]` within 1e-6; +12 st reads `2n` within 1e-5; start unchanged by pitch (R-GR-2)
-- [ ] 3.4 GREEN: `renderGrain<Interp>` in `Grain.h`
-- [ ] 3.5 RED: `tests/test_params.cpp` (EngineParams clamp table incl. NaN, pitch 100 equals 24)
-- [ ] 3.6 GREEN: `EngineParams.h`, clamp in `setParams`
-- [ ] 3.7 RED: `tests/test_engine_bounds.cpp`: near-end grain shrinks, no OOB, no step above window slope bound; tiny 1/2-sample source finite; density 0 or null source gives exact 0.0; mono equals dual-mono; spread 0 centres (R-GR-3, 4, 5)
-- [ ] 3.8 GREEN: `GranularEngine.{h,cpp}` (segment loop, spawn bounds, fixed 3 draws before skip, pan, norm gain, flush+ceiling pass)
-- [ ] 3.9 REFACTOR: constants to named values, document ceiling and gain bound
+- [x] 3.1 RED: `tests/test_interpolator.cpp` (exact at integers, midpoints, last-sample read stays in range, no OOB under guarded buffer)
+- [x] 3.2 GREEN: `Interpolator.h` (`LinearInterpolator`, `InterpolationMode`, index clamp guard)
+- [x] 3.3 RED: `tests/test_grain_render.cpp`: unity pitch equals `window(n/256)*src[1000+n]` within 1e-6; +12 st reads `2n` within 1e-5; start unchanged by pitch (R-GR-2)
+- [x] 3.4 GREEN: `renderGrain<Interp>` in `Grain.h`
+- [x] 3.5 RED: `tests/test_params.cpp` (EngineParams clamp table incl. NaN, pitch 100 equals 24)
+- [x] 3.6 GREEN: `EngineParams.h`, clamp in `setParams`
+- [x] 3.7 RED: `tests/test_engine_bounds.cpp`: near-end grain shrinks, no OOB, no step above window slope bound; tiny 1/2-sample source finite; density 0 or null source gives exact 0.0; mono equals dual-mono; spread 0 centres (R-GR-3, 4, 5)
+- [x] 3.8 GREEN: `GranularEngine.{h,cpp}` (segment loop, spawn bounds, fixed 3 draws before skip, pan, norm gain, flush+ceiling pass)
+- [x] 3.9 REFACTOR: constants to named values, document ceiling and gain bound
 
 ## PR4: Hardening and RT safety
 
-- [ ] 4.1 RED+GREEN: `tests/test_engine_determinism.cpp`: same seed bit-identical (2 s); block split 512/37/1/one block bit-identical; interleaved instances A/B equal solo runs (R-GR-6, 9)
-- [ ] 4.2 RED+GREEN: `tests/test_engine_extremes.cpp`: grid size/pitch/density/position per R-GR-7, finite and |y|<=4.0; sample rates 22050-192000; denormal-free silence; worst-case coherent DC at full pool vs ceiling
-- [ ] 4.3 RED+GREEN: RMS test, noise source, 50 ms, 20 vs 400 gr/s within 3 dB; density-sweep step bound (amended R-GR-5)
-- [ ] 4.4 RED+GREEN: skip-draw test: saturated pool leaves active grain output identical to unsaturated first 128 (R-GS-6)
-- [ ] 4.5 RED: `tests/support/AllocationCounter.{h,cpp}` (replace `new/new[]/aligned`, RAII scope) and `tests/test_engine_realtime.cpp`: 0 allocations normal, pool-full, extremes, block sizes up to 4096 (R-GR-8)
-- [ ] 4.6 GREEN: fix any engine allocation or ceiling breach found; final `ctest` green on a fresh build dir
+- [x] 4.1 RED+GREEN: `tests/test_engine_determinism.cpp`: same seed bit-identical (2 s); block split 512/37/1/one block bit-identical; interleaved instances A/B equal solo runs (R-GR-6, 9)
+- [x] 4.2 RED+GREEN: `tests/test_engine_extremes.cpp`: grid size/pitch/density/position per R-GR-7, finite and |y|<=4.0; sample rates 22050-192000; denormal-free silence; worst-case coherent DC at full pool vs ceiling
+- [x] 4.3 RED+GREEN: RMS test, noise source, 50 ms, 20 vs 400 gr/s within 3 dB; density-sweep step bound (amended R-GR-5)
+- [x] 4.4 RED+GREEN: skip-draw test: saturated pool leaves active grain output identical to unsaturated first 128 (R-GS-6)
+- [x] 4.5 RED: `tests/support/AllocationCounter.{h,cpp}` (replace `new/new[]/aligned`, RAII scope) and `tests/test_engine_realtime.cpp`: 0 allocations normal, pool-full, extremes, block sizes up to 4096 (R-GR-8)
+- [x] 4.6 GREEN: fix any engine allocation or ceiling breach found; final `ctest` green on a fresh build dir

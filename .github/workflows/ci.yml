@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-sanitizers:
+    name: Linux clang ASan + UBSan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CC: clang-18
+      CXX: clang++-18
+      ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+      UBSAN_OPTIONS: print_stacktrace=1
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      # Older ASan runtimes crash under the high ASLR entropy of newer runner kernels.
+      - name: Lower ASLR entropy
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+
+      - name: Install Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DGRAINS_BUILD_PLUGIN=OFF -DGRAINS_SANITIZE=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  windows-msvc:
+    name: Windows MSVC
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DGRAINS_BUILD_PLUGIN=OFF
+
+      - name: Build
+        run: cmake --build build --config Debug
+
+      - name: Test
+        run: ctest --test-dir build -C Debug --output-on-failure
+
+      # The allocation-failure sweeps (grains_alloc_failure_tests) are compiled out under the MSVC debug
+      # runtime, so only a Release build exercises them on Windows. A separate build directory keeps the
+      # per-configuration test discovery of Debug and Release from mixing.
+      - name: Configure (Release)
+        run: cmake -S . -B build-release -A x64 -DGRAINS_BUILD_PLUGIN=OFF
+
+      - name: Build (Release)
+        run: cmake --build build-release --config Release
+
+      - name: Test (Release)
+        run: ctest --test-dir build-release -C Release --output-on-failure
+
+  windows-msvc-plugin:
+    name: Windows MSVC plugin (informational)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Cache fetched JUCE
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: build-plugin/_deps
+          key: ${{ runner.os }}-juce-${{ hashFiles('cmake/JucePin.cmake') }}
+
+      - name: Configure
+        run: cmake -S . -B build-plugin -A x64 -DGRAINS_BUILD_PLUGIN=ON
+
+      - name: Build plugin
+        run: cmake --build build-plugin --config Debug --target grains_plugin --parallel

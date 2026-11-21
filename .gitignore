@@ -28,3 +28,6 @@
 # OS
 Thumbs.db
 .DS_Store
+
+build/
+build-plugin*/
