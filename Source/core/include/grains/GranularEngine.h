@@ -4,6 +4,7 @@
 #include <grains/EngineParams.h>
 #include <grains/Grain.h>
 #include <grains/GrainPool.h>
+#include <grains/GrainSnapshot.h>
 #include <grains/GrainScheduler.h>
 #include <grains/Interpolator.h>
 #include <grains/Rng.h>
@@ -69,6 +70,11 @@ public:
 
     // Read-only introspection (tests): grains currently playing, at most GrainPool::kCapacity.
     int activeGrainCount() const noexcept { return pool_.activeCount(); }
+
+    // Display introspection (R-GR-11, R-WD-5): copies the active grains into `out` (count ==
+    // activeGrainCount()). A pure reader of the pool, source and window: it never changes the
+    // render, the RNG or the pool, and it never allocates. Call it between process() calls.
+    void snapshotGrains(GrainSnapshot& out) const noexcept;
 
 private:
     void renderSegment(float* left, float* right, int offset, int count) noexcept;
