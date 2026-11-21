@@ -54,38 +54,38 @@ Do NOT parallelise any apply task. Single writer, strictly in order:
 
 ## Phase 1: TripleBuffer (R-WD-6)
 
-- [ ] 1.1 RED: `tests/test_triple_buffer.cpp` single-thread cases: initial `front()` is `T{}`; `update()` false before any publish; publish then update true then update false; latest of several publishes wins; the three indices stay pairwise distinct across many publish/update interleavings; `front()` is stable across later publishes until the next `update()`. Must fail to compile.
-- [ ] 1.2 GREEN: `Source/core/include/grains/TripleBuffer.h` header-only `TripleBuffer<T>` per design D4 (`back`, `publish`, `update`, `front`; 64-byte aligned slots and control words; `is_always_lock_free` static_assert; acq_rel exchange).
-- [ ] 1.3 RED: two-thread stress test in the same file: 100k publishes of a 512-byte struct whose words all equal the sequence number; consumer asserts every observed frame is internally consistent, sequence strictly increases, and the last frame is eventually seen. Bounded loops, no sleeps, no timing asserts. Runs against the 1.2 header (written to fail first with a deliberately torn publish if a true RED is wanted, then fixed).
-- [ ] 1.4 GREEN: stress test passes reliably (run it repeatedly, for example 20 times, before moving on). Fix the header only if it fails.
+- [x] 1.1 RED: `tests/test_triple_buffer.cpp` single-thread cases: initial `front()` is `T{}`; `update()` false before any publish; publish then update true then update false; latest of several publishes wins; the three indices stay pairwise distinct across many publish/update interleavings; `front()` is stable across later publishes until the next `update()`. Must fail to compile.
+- [x] 1.2 GREEN: `Source/core/include/grains/TripleBuffer.h` header-only `TripleBuffer<T>` per design D4 (`back`, `publish`, `update`, `front`; 64-byte aligned slots and control words; `is_always_lock_free` static_assert; acq_rel exchange).
+- [x] 1.3 RED: two-thread stress test in the same file: 100k publishes of a 512-byte struct whose words all equal the sequence number; consumer asserts every observed frame is internally consistent, sequence strictly increases, and the last frame is eventually seen. Bounded loops, no sleeps, no timing asserts. Runs against the 1.2 header (written to fail first with a deliberately torn publish if a true RED is wanted, then fixed).
+- [x] 1.4 GREEN: stress test passes reliably (run it repeatedly, for example 20 times, before moving on). Fix the header only if it fails.
 
 ## Phase 2: GrainSnapshot, pool iteration, snapshotGrains (R-WD-5, R-GR-11)
 
-- [ ] 2.1 RED: `tests/test_grain_snapshot.cpp`: count equals `activeGrainCount()`; marks normalised and finite (`position`, `progress`, `level` in [0, 1], no NaN); end-of-buffer clamp; slots distinct and in index order and stable across blocks; null source and empty source give count 0; density 0 gives count 0; saturated pool (128); `version == kVersion` (1); empty after `setSource` and after `prepare`; `static_assert(sizeof(GrainMark) == 16)`; method is `const noexcept` (compile-time check). Must fail to compile.
-- [ ] 2.2 GREEN: `Source/core/include/grains/GrainSnapshot.h` (`GrainMark`, `GrainSnapshot`, `kVersion`, 128 marks).
-- [ ] 2.3 GREEN: `GrainPool::forEachActiveSlot(F) const` calling `f(int slot, const Grain&)` in index order (`GrainPool.h`).
-- [ ] 2.4 GREEN: `GranularEngine::snapshotGrains(GrainSnapshot&) const noexcept` in `GranularEngine.h` and `src/GranularEngine.cpp` per the Engine snapshot rules (D3); `level = window_.at(progress)`.
-- [ ] 2.5 Gate: `grains_tests` green for existing and new snapshot tests.
+- [x] 2.1 RED: `tests/test_grain_snapshot.cpp`: count equals `activeGrainCount()`; marks normalised and finite (`position`, `progress`, `level` in [0, 1], no NaN); end-of-buffer clamp; slots distinct and in index order and stable across blocks; null source and empty source give count 0; density 0 gives count 0; saturated pool (128); `version == kVersion` (1); empty after `setSource` and after `prepare`; `static_assert(sizeof(GrainMark) == 16)`; method is `const noexcept` (compile-time check). Must fail to compile.
+- [x] 2.2 GREEN: `Source/core/include/grains/GrainSnapshot.h` (`GrainMark`, `GrainSnapshot`, `kVersion`, 128 marks).
+- [x] 2.3 GREEN: `GrainPool::forEachActiveSlot(F) const` calling `f(int slot, const Grain&)` in index order (`GrainPool.h`).
+- [x] 2.4 GREEN: `GranularEngine::snapshotGrains(GrainSnapshot&) const noexcept` in `GranularEngine.h` and `src/GranularEngine.cpp` per the Engine snapshot rules (D3); `level = window_.at(progress)`.
+- [x] 2.5 Gate: `grains_tests` green for existing and new snapshot tests.
 
 ## Phase 3: Bit-identical render (R-GR-11)
 
-- [ ] 3.1 RED: in `test_grain_snapshot.cpp` add engine A (render only) vs engine B (render and `snapshotGrains` after every block): same seed, same params, 400 blocks, compare outputs bitwise (`memcmp`) and compare `activeGrainCount()` per block.
-- [ ] 3.2 RED: add "snapshot does not alter pool or RNG": call `snapshotGrains` repeatedly between blocks and confirm subsequent output equals the no-snapshot run.
-- [ ] 3.3 GREEN: both pass against the Phase 2 implementation (they are expected to pass immediately because the method is a pure const reader; if one fails, fix the engine, never the test).
+- [x] 3.1 RED: in `test_grain_snapshot.cpp` add engine A (render only) vs engine B (render and `snapshotGrains` after every block): same seed, same params, 400 blocks, compare outputs bitwise (`memcmp`) and compare `activeGrainCount()` per block.
+- [x] 3.2 RED: add "snapshot does not alter pool or RNG": call `snapshotGrains` repeatedly between blocks and confirm subsequent output equals the no-snapshot run.
+- [x] 3.3 GREEN: both pass against the Phase 2 implementation (they are expected to pass immediately because the method is a pure const reader; if one fails, fix the engine, never the test).
 
 ## Phase 4: Zero-alloc realtime test (R-GR-11, R-PS-5, R-WD-6)
 
-- [ ] 4.1 RED: in `tests/test_engine_realtime.cpp` (`grains_realtime_tests`), inside an `AllocationScope`: `process`, `snapshotGrains`, mailbox `back()`, `publish`, `update`; assert 0 allocations and `snapshot.count == engine.activeGrainCount()`.
-- [ ] 4.2 GREEN: passes using the existing allocation counter; fix any hidden allocation in the new code if it fails.
+- [x] 4.1 RED: in `tests/test_engine_realtime.cpp` (`grains_realtime_tests`), inside an `AllocationScope`: `process`, `snapshotGrains`, mailbox `back()`, `publish`, `update`; assert 0 allocations and `snapshot.count == engine.activeGrainCount()`.
+- [x] 4.2 GREEN: passes using the existing allocation counter; fix any hidden allocation in the new code if it fails.
 
 ## Phase 5: GrainDisplayModel (R-WD-7)
 
-- [ ] 5.1 RED: `tests/test_grain_display_model.cpp`: fresh frame displays and returns true when old or new count > 0; marks held for fewer than `kStaleTicks` idle ticks (7 ticks no repaint); the 8th idle tick (about 267 ms) clears and returns true once, later idle ticks return false; empty-to-empty fresh frame returns false; fresh frame resumes after stale; `reset()` clears marks; `kPollHz == 30`, `kStaleMs == 250`, `kStaleTicks == 8` and the constants are distinct. Must fail to compile.
-- [ ] 5.2 GREEN: `Source/core/include/grains/GrainDisplayModel.h` and `src/GrainDisplayModel.cpp`: `tick(const GrainSnapshot*)`, `reset()`, `shown()`, constants per D6.
+- [x] 5.1 RED: `tests/test_grain_display_model.cpp`: fresh frame displays and returns true when old or new count > 0; marks held for fewer than `kStaleTicks` idle ticks (7 ticks no repaint); the 8th idle tick (about 267 ms) clears and returns true once, later idle ticks return false; empty-to-empty fresh frame returns false; fresh frame resumes after stale; `reset()` clears marks; `kPollHz == 30`, `kStaleMs == 250`, `kStaleTicks == 8` and the constants are distinct. Must fail to compile.
+- [x] 5.2 GREEN: `Source/core/include/grains/GrainDisplayModel.h` and `src/GrainDisplayModel.cpp`: `tick(const GrainSnapshot*)`, `reset()`, `shown()`, constants per D6.
 
 ## Phase 6: CMake registration (PR 1 gate)
 
-- [ ] 6.1 Register `GrainDisplayModel.cpp` in `Source/core/CMakeLists.txt` and the three new test files in `tests/CMakeLists.txt` (added incrementally as each RED step needs them; this task is the final check that nothing is unregistered).
+- [x] 6.1 Register `GrainDisplayModel.cpp` in `Source/core/CMakeLists.txt` and the three new test files in `tests/CMakeLists.txt` (added incrementally as each RED step needs them; this task is the final check that nothing is unregistered).
 - [ ] 6.2 Gate: `grains_tests`, `grains_realtime_tests` and the JUCE-free core check (R-BH-1) green; `git diff` confirms `render` output path unchanged. Open PR 1.
 
 ## Phase 7: Processor owns the mailbox (R-PS-4, R-PS-5, R-WD-6)

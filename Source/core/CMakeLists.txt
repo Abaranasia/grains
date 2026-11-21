@@ -2,6 +2,7 @@
 add_library(grains_core STATIC
   src/ParamLimits.cpp
   src/GrainScheduler.cpp
+  src/GrainDisplayModel.cpp
   src/GranularEngine.cpp
   src/LoadPlanner.cpp
   src/Resampler.cpp
