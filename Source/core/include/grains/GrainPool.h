@@ -4,6 +4,7 @@
 #include <grains/Grain.h>
 
 #include <array>
+#include <cstddef>
 #include <utility>
 
 namespace grains {
@@ -49,6 +50,15 @@ public:
     {
         for (Grain& g : grains_)
             if (g.active) f(g);
+    }
+
+    // Const visit in index order as f(slot, grain): the pool cannot change during the walk, and the
+    // slot index is what the display needs.
+    template <class F>
+    void forEachActiveSlot(F&& f) const noexcept(noexcept(f(0, std::declval<const Grain&>())))
+    {
+        for (int i = 0; i < kCapacity; ++i)
+            if (grains_[static_cast<std::size_t>(i)].active) f(i, grains_[static_cast<std::size_t>(i)]);
     }
 
 private:

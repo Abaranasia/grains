@@ -9,6 +9,12 @@ namespace grains {
 namespace {
 constexpr double kPi = 3.14159265358979323846;
 
+// Clamped to [0, 1]; NaN fails both comparisons and maps to 0.
+float clamp01(double v) noexcept
+{
+    return v > 0.0 ? (v < 1.0 ? static_cast<float>(v) : 1.0f) : 0.0f;
+}
+
 } // namespace
 
 float GranularEngine::softLimit(float y) noexcept
@@ -79,6 +85,27 @@ void GranularEngine::renderSegment(float* left, float* right, int offset, int co
         if (count > 0)
             renderGrain<LinearInterpolator>(g, srcL, srcR, frames, window_, left + offset, right + offset, count);
         if (g.age >= g.length) pool_.release(g);
+    });
+}
+
+void GranularEngine::snapshotGrains(GrainSnapshot& out) const noexcept
+{
+    out.version = GrainSnapshot::kVersion;
+    out.count = 0;
+    if (source_ == nullptr) return; // setSource and prepare reset the pool, so it is empty here too
+
+    const int frames = source_->numFrames();
+    const double lastFrame = frames > 1 ? static_cast<double>(frames - 1) : 0.0;
+    pool_.forEachActiveSlot([&](int slot, const Grain& g) {
+        // spawn keeps pos <= frames - 1; the clamp only absorbs floating-point rounding.
+        // progress is the expression renderGrain feeds the window, so level is the next sample's window.
+        const float progress = g.length > 0 ? clamp01(static_cast<float>(g.age) / static_cast<float>(g.length)) : 0.0f;
+        GrainMark& m = out.marks[static_cast<std::size_t>(out.count++)];
+        m.position = lastFrame > 0.0 ? clamp01(g.pos / lastFrame) : 0.0f;
+        m.progress = progress;
+        m.level = clamp01(static_cast<double>(window_.at(progress)));
+        m.slot = static_cast<std::uint16_t>(slot);
+        m.reserved = 0;
     });
 }
 

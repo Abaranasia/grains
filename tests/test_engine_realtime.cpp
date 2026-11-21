@@ -3,9 +3,11 @@
 
 #include <grains/EngineParams.h>
 #include <grains/GrainPool.h>
+#include <grains/GrainSnapshot.h>
 #include <grains/GranularEngine.h>
 #include <grains/SampleBuffer.h>
 #include <grains/SourceExchange.h>
+#include <grains/TripleBuffer.h>
 
 #include "support/AllocationCounter.h"
 #include "support/EngineHelpers.h"
@@ -349,4 +351,47 @@ TEST_CASE("realtime: committing a staged source and acquiring it allocates and f
     CHECK(static_cast<bool>(displaced));
     displaced = grains::SourceExchange<SampleBuffer>::Staged{};
     x.collect();
+}
+
+// R-GR-11, R-PS-5, R-WD-6: the audio thread's whole display hook (snapshot into the mailbox's back
+// slot, publish) and the consumer's poll (update, front) allocate nothing, with a light and a
+// saturated pool. The mailbox is plain member storage, so it exists before the scope.
+TEST_CASE("realtime: snapshotting and publishing grains allocates nothing", "[realtime][grain_snapshot]")
+{
+    const SampleBuffer src(grains_test::noise(200000, 13), grains_test::noise(200000, 14), kSr);
+    for (float density : {40.0f, 1000.0f}) {
+        INFO("density=" << density);
+        GranularEngine e;
+        e.prepare(kSr, 6);
+        e.setSource(&src);
+        EngineParams p;
+        p.density = density;
+        p.grainSizeMs = 1000.0f;
+        p.position = 0.1f;
+        e.setParams(p);
+        grains::TripleBuffer<grains::GrainSnapshot> mailbox;
+        std::vector<float> l(512), r(512);
+        for (int i = 0; i < 40; ++i) e.process(l.data(), r.data(), 512); // warm up outside the scope
+        std::size_t allocs = 99;
+        int fresh = 0, mismatches = 0, maxCount = 0;
+        {
+            AllocationScope scope;
+            for (int i = 0; i < 100; ++i) {
+                e.process(l.data(), r.data(), 512);
+                e.snapshotGrains(mailbox.back());
+                mailbox.publish();
+                if (mailbox.update()) {
+                    ++fresh;
+                    if (mailbox.front().count != e.activeGrainCount()) ++mismatches;
+                    maxCount = std::max(maxCount, static_cast<int>(mailbox.front().count));
+                }
+            }
+            allocs = scope.count();
+        }
+        CHECK(allocs == 0);
+        CHECK(fresh == 100);
+        CHECK(mismatches == 0);
+        CHECK(maxCount > 0);
+        if (density == 1000.0f) CHECK(maxCount == grains::GrainPool::kCapacity);
+    }
 }
