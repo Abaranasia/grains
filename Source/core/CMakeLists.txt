@@ -8,6 +8,7 @@ add_library(grains_core STATIC
   src/SampleBuffer.cpp
   src/SampleBuilder.cpp
   src/SamplePathResolver.cpp
+  src/WaveformPeaks.cpp
   src/WindowTable.cpp)
 target_include_directories(grains_core PUBLIC include)
 target_compile_features(grains_core PUBLIC cxx_std_17)
