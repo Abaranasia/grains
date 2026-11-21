@@ -43,7 +43,7 @@ The processor MUST create an `AudioProcessorValueTreeState` whose parameters are
 - Then the displayed value matches within the mapping's conversion tolerance
 
 ### R-PS-4 Processing and output
-`prepareToPlay` MUST prepare the engine with the host sample rate (`GranularEngine::prepare(sampleRate, seed)` takes no block size); the maximum block size MUST be used only to size any scratch buffers. `processBlock` MUST, per block, acquire any newly published source from `SourceExchange` and call `GranularEngine::setSource` only when the source changed, read parameter values, map them via `parameter-mapping` to `EngineParams`, apply them to the engine, and render. While no sample is loaded (or the last restore reported a missing file), the output MUST be silence (exact zeros). Once a sample is loaded, the engine MUST render grains continuously (always-on drone; there is no MIDI gating), and the output amplitude MUST be bounded by the engine's soft output limiter (`grain-rendering` R-GR-10), so that |y| < 1.0 (0 dBFS) at all times; the plugin applies no additional limiter or gain stage. The engine MUST NOT produce NaN/Inf, and no clicks, glitches, or denormal-related CPU spikes MAY occur, except a possible brief dropout when the engine pool resets on a source swap. The plugin MUST accept a stereo output bus; input bus handling MAY be disabled.
+`prepareToPlay` MUST prepare the engine with the host sample rate (`GranularEngine::prepare(sampleRate, seed)` takes no block size); the maximum block size MUST be used only to size any scratch buffers. `prepareToPlay` MUST also publish an empty grain snapshot (`count == 0`) so no stale display data survives a re-prepare. `processBlock` MUST, per block, acquire any newly published source from `SourceExchange` and call `GranularEngine::setSource` only when the source changed, read parameter values, map them via `parameter-mapping` to `EngineParams`, apply them to the engine, render, and then, as the final step on every render path (mono source and stereo source), take a grain snapshot and publish it to the display mailbox (`waveform-display` R-WD-6). The existing `getNumChannels() <= 0` early return, which runs before any render, deliberately does not publish (it returns before anything is rendered, so there is nothing to display). While no sample is loaded (or the last restore reported a missing file), the output MUST be silence (exact zeros). Once a sample is loaded, the engine MUST render grains continuously (always-on drone; there is no MIDI gating), and the output amplitude MUST be bounded by the engine's soft output limiter (`grain-rendering` R-GR-10), so that |y| < 1.0 (0 dBFS) at all times; the plugin applies no additional limiter or gain stage. The publish step MUST NOT change the output. The engine MUST NOT produce NaN/Inf, and no clicks, glitches, or denormal-related CPU spikes MAY occur, except a possible brief dropout when the engine pool resets on a source swap. The plugin MUST accept a stereo output bus; input bus handling MAY be disabled.
 
 #### Scenario: Silence without a sample [Manual]
 - Given the Standalone running with default parameters and no sample loaded
@@ -70,18 +70,33 @@ The processor MUST create an `AudioProcessorValueTreeState` whose parameters are
 - When the plugin is prepared and run
 - Then it starts without error and outputs silence when no sample is loaded
 
+#### Scenario: Publish runs on mono and stereo paths [Manual]
+- Given a mono sample and a stereo sample loaded in turn
+- When blocks are processed
+- Then a snapshot is published after every block on both paths and the audio output is unchanged by the publish step
+
+#### Scenario: Empty snapshot after prepare [Manual]
+- Given grains are displayed and the host re-prepares the plugin
+- When the editor next polls
+- Then it receives an empty snapshot and shows no stale markers
+
 ### R-PS-5 Real-time safety
-`processBlock` MUST NOT allocate, lock, block, perform I/O, or throw. Parameter reads MUST use lock-free atomic access (APVTS raw parameter values). Any allocation MUST happen in the constructor or `prepareToPlay`. `ScopedNoDenormals` (or equivalent) MUST be applied in `processBlock`.
+`processBlock` MUST NOT allocate, lock, block, perform I/O, or throw. Parameter reads MUST use lock-free atomic access (APVTS raw parameter values). Any allocation MUST happen in the constructor or `prepareToPlay`. `ScopedNoDenormals` (or equivalent) MUST be applied in `processBlock`. The grain snapshot and publish step in `processBlock` MUST be lock-free and allocation-free: the snapshot is built in pre-sized storage and handed to the wait-free mailbox (`waveform-display` R-WD-6), with no lock, wait, allocation, or throw.
 
 #### Scenario: Code review for RT rules [Manual]
 - Given the processor source
-- When `processBlock` and the functions it calls are reviewed
+- When `processBlock` and the functions it calls (including the snapshot and publish step) are reviewed
 - Then no allocation, lock, I/O, or exception site is present and `ScopedNoDenormals` is used
 
 #### Scenario: Engine/mapper allocation-free [Catch2]
 - Given the existing engine allocation-free test and `parameter-mapping` `noexcept` mapping
 - When the suite runs
 - Then the engine render path and mapping function are covered by automated tests and pass
+
+#### Scenario: Snapshot and publish allocation-free [Catch2]
+- Given the test binary that counts global operator new/delete calls
+- When the counter is reset after preparation and many snapshot-and-publish cycles run
+- Then the allocation count is 0 (core part; the processor call site is verified by review)
 
 ### R-PS-6 Editor
 The plugin MUST provide a custom editor that embeds `juce::GenericAudioProcessorEditor`, showing all 9 parameters, together with the sample-loader UI defined in `sample-source` (Load button, drag-and-drop, file/status label) and the waveform/position view defined in `waveform-display` (`WaveformView` above the generic editor). The editor window MUST have a fixed size. MIDI note handling and any other custom parameter UI MUST NOT be provided. The set of parameters MUST remain exactly the 9 of R-PS-3; the waveform view only drives the existing `position` parameter and MUST NOT add parameters.

@@ -10,7 +10,7 @@ Show the loaded sample as a waveform with the `position` marker and a read-only 
 ### R-WD-4 Waveform view [PR2]
 The editor MUST show a `WaveformView` above the generic parameter editor, displaying the full sample (no zoom or scroll) as mixed mono min/max peaks, a `position` marker, and a read-only jitter band derived from `position` and `positionJitter` via `WaveformGeometry`. Mouse down in the view MUST set `position` to the clicked x (absolute jump) and subsequent drag MUST continue to update `position` from the pointer x (clamped to [0, 1]). The drag MUST drive the `position` parameter through a `juce::ParameterAttachment`, calling begin-change-gesture on mouse down and end-change-gesture on mouse up so host automation records the move. The view MUST NOT change any parameter other than `position` (the jitter band is not draggable). The marker and band MUST follow `position` and `positionJitter` changes from automation or the generic sliders. When no peaks are available, the view MUST show a "drop a sample" hint if no sample is loaded, and a "no waveform" indication if a sample is loaded without peaks.
 
-The static layers (waveform, jitter band, `position` marker) MUST stay change-driven: they MUST repaint only on change (parameter, peaks, or resize) and MUST be cached so a live tick does not recompute them. The view MAY own a poll timer at a single named rate constant of 30 Hz, and that timer MUST run only while the view is showing (started on show, stopped on hide and on destruction). A timer tick MUST request a repaint only when a fresh grain frame was received or when the display model transitions to stale (R-WD-7); otherwise it MUST NOT repaint. The editor window size MUST be fixed (not resizable), taller than before to fit the view and the lane strip; all existing editor elements remain.
+The static layers (waveform, jitter band, `position` marker) MUST stay change-driven: they MUST repaint only on change (parameter, peaks, or resize) and MUST be cached so a live tick does not recompute them. The view MAY own a poll timer at a single named rate constant of 30 Hz, and that timer MUST run only while the view is showing, a waveform is displayed (Waveform state) and a poll function is set (started when all three hold, stopped on hide, on leaving the Waveform state, and on destruction). A timer tick MUST request a repaint only when a fresh grain frame was received or when the display model transitions to stale (R-WD-7); otherwise it MUST NOT repaint. The editor window size MUST be fixed (not resizable), taller than before to fit the view and the lane strip; all existing editor elements remain.
 
 #### Scenario: Click jumps position [Manual]
 - Given a loaded sample and `position` at 0.1
@@ -128,7 +128,7 @@ Snapshots MUST be published from the audio thread to the message thread through 
 ### R-WD-7 Live lane-dot view [PR1 display model, PR2 view]
 The view MUST show a strip under the waveform (inside the same view, below the peaks area) with one dot slot per pool slot, laid out on a fixed number of rows (the strip height and slot-to-row mapping are design decisions, constant for a given view size). A dot MUST be drawn at the x of the mark's `position` (via `WaveformGeometry`) on the row of its `slot`, with alpha derived from its `level` (louder envelope is more opaque; level 0 is faint or invisible). The dots are a live-only layer: they MUST NOT alter or invalidate the cached static layers.
 
-A JUCE-free `GrainDisplayModel` in `grains_core` MUST decide fresh versus stale: it takes the poll results and elapsed time, holds the last frame while frames keep arriving, and MUST clear the markers once no fresh frame has arrived for the stale-timeout constant (about 250 ms, one named constant; the poll rate is a separate single named constant of 30 Hz). Frames arriving again MUST resume display immediately. The model MUST report a stale transition exactly once per fresh-to-stale change so the view can repaint once to clear. Markers MUST be shown only in the Waveform state (peaks available) and MUST NOT be shown in the "no waveform" or "drop a sample" states. When the host is stopped (no `processBlock` publishes), the markers MUST clear after about 250 ms. Grains shorter than one audio block can start and finish between two snapshots and are not guaranteed to be shown (documented limitation; the display samples at block rate, so what is shown is representative, not exhaustive).
+A JUCE-free `GrainDisplayModel` in `grains_core` MUST decide fresh versus stale: it takes the poll results and counts poll ticks (not wall-clock time), holds the last frame while frames keep arriving, and MUST clear the markers once no fresh frame has arrived for the stale timeout (one named constant of 250 ms, counted in poll ticks as 8 consecutive polls without a fresh frame, about 267 ms effective at 30 Hz; the poll rate is a separate single named constant of 30 Hz). Frames arriving again MUST resume display immediately. The model MUST report a stale transition exactly once per fresh-to-stale change so the view can repaint once to clear. Markers MUST be shown only in the Waveform state (peaks available) and MUST NOT be shown in the "no waveform" or "drop a sample" states. When the host is stopped (no `processBlock` publishes), the markers MUST clear after the same 8 polls (about 267 ms). Grains shorter than one audio block can start and finish between two snapshots and are not guaranteed to be shown (documented limitation; the display samples at block rate, so what is shown is representative, not exhaustive).
 
 #### Scenario: Fresh frame displays [Automated]
 - Given a display model and a fresh frame with 5 marks
@@ -137,12 +137,12 @@ A JUCE-free `GrainDisplayModel` in `grains_core` MUST decide fresh versus stale:
 
 #### Scenario: Marks held until the timeout [Automated]
 - Given a model that last received a fresh frame at t = 0
-- When it is updated at t just below the stale timeout without a new frame
+- When it is polled 7 consecutive times without a new frame (one below the stale tick count)
 - Then the marks are still exposed and no stale transition is reported
 
 #### Scenario: Stale clears markers once [Automated]
 - Given a model that last received a fresh frame at t = 0
-- When it is updated at t at or above the stale timeout without a new frame, and again later
+- When it is polled the 8th consecutive time without a new frame (the stale tick count), and again later
 - Then the markers are cleared and the stale transition is reported exactly once
 
 #### Scenario: Fresh frame resumes after stale [Automated]
@@ -153,7 +153,7 @@ A JUCE-free `GrainDisplayModel` in `grains_core` MUST decide fresh versus stale:
 #### Scenario: Constants are named and distinct [Automated]
 - Given the display model header
 - When the poll rate and stale timeout are inspected
-- Then the poll rate is a single named constant equal to 30 Hz and the stale timeout a single named constant of about 250 ms
+- Then the poll rate is a single named constant equal to 30 Hz and the stale timeout a single named constant of 250 ms, counted as 8 polls
 
 #### Scenario: Dots appear under the waveform and follow the grains [Manual]
 - Given a loaded sample and audio running
@@ -162,7 +162,7 @@ A JUCE-free `GrainDisplayModel` in `grains_core` MUST decide fresh versus stale:
 
 #### Scenario: Host stopped clears markers [Manual]
 - Given markers are showing and the DAW transport stops (no `processBlock` calls)
-- When about 250 ms pass
+- When 8 consecutive polls pass without a fresh frame (about 267 ms)
 - Then the markers clear and the view stops repainting
 
 #### Scenario: No markers without a waveform [Manual]

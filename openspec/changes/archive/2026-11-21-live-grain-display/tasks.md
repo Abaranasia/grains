@@ -86,7 +86,8 @@ Do NOT parallelise any apply task. Single writer, strictly in order:
 ## Phase 6: CMake registration (PR 1 gate)
 
 - [x] 6.1 Register `GrainDisplayModel.cpp` in `Source/core/CMakeLists.txt` and the three new test files in `tests/CMakeLists.txt` (added incrementally as each RED step needs them; this task is the final check that nothing is unregistered).
-- [ ] 6.2 Gate: `grains_tests`, `grains_realtime_tests` and the JUCE-free core check (R-BH-1) green; `git diff` confirms `render` output path unchanged. Open PR 1.
+- [x] 6.2 Gate: `grains_tests`, `grains_realtime_tests` and the JUCE-free core check (R-BH-1) green; `git diff` confirms `render` output path unchanged. Open PR 1.
+  - Note (split recorded at archive): the planned PR 1 ran ~882 lines against the 800 budget, so by the documented fallback Phase 5 (GrainDisplayModel, ~189 lines) shipped as its own slice. Delivery is three stacked core/plugin slices instead of two PRs: bc248ff core snapshot + TripleBuffer (branch feat/live-grain-core), 3cd047d GrainDisplayModel (branch feat/live-grain-model), 85ab354 plugin (branch feat/live-grain-view). Phase 10 remains open (carried as pending, see archive-report.md).
 
 ## Phase 7: Processor owns the mailbox (R-PS-4, R-PS-5, R-WD-6)
 

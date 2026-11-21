@@ -1,5 +1,7 @@
 # Exploration: live-grain-display
 
+> **Superseded by design**: the numbers in this document are superseded. See `design.md` (Proposal Corrections) for the corrected values: clear after 8 non-fresh ticks (~267 ms, not 250 ms), 16-byte `GrainMark` (not 12), flicker only for blocks above ~233 ms (~10k samples at 44.1 kHz, not 8192).
+
 Mirror of engram `sdd/live-grain-display/explore` (#718).
 
 ## Current state
