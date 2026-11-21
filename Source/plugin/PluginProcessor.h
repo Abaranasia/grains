@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #pragma once
 
+#include <grains/GrainSnapshot.h>
 #include <grains/GranularEngine.h>
 #include <grains/ParamSpec.h>
 #include <grains/SampleBuffer.h>
 #include <grains/SourceExchange.h>
+#include <grains/TripleBuffer.h>
 
 #include "SampleLoader.h"
 
@@ -52,9 +54,21 @@ public:
     const grains::WaveformState& waveform() const noexcept { return waveform_; }
     // The host-visible parameter for a ParamSpec id (nullptr if unknown), for editor attachments.
     juce::RangedAudioParameter* parameter(const juce::String& id) { return apvts_.getParameter(id); }
+    // Latest grain snapshot published by the audio thread, or nullptr when nothing newer arrived since the
+    // last call. The pointer stays valid until the next call. Single consumer: message thread only.
+    const grains::GrainSnapshot* pollGrains() noexcept
+    {
+        return grainMailbox_.update() ? &grainMailbox_.front() : nullptr;
+    }
 
 private:
     void onLoadResult(const SampleLoader::Result& r);
+    // Audio thread (and prepareToPlay, which the host serialises against it): copy the pool into the mailbox.
+    void publishGrains() noexcept
+    {
+        engine_.snapshotGrains(grainMailbox_.back());
+        grainMailbox_.publish();
+    }
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
@@ -67,6 +81,7 @@ private:
     grains::GranularEngine engine_;
     juce::HeapBlock<float> scratch_; // right channel when the host output is mono
     int scratchSize_ = 0;
+    grains::TripleBuffer<grains::GrainSnapshot> grainMailbox_; // audio thread produces, message thread polls
     std::atomic<std::uint64_t> restoreGeneration_{0}; // generation of the last setStateInformation request
     juce::String status_{"No sample"};
     grains::WaveformState waveform_; // message thread only

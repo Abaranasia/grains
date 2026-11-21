@@ -66,6 +66,7 @@ void GrainsAudioProcessor::prepareToPlay(double sampleRate, int maxBlockSize)
     loader_.retarget(sampleRate); // reissues or reloads off this thread; a no-op when the rate is unchanged
     scratchSize_ = std::max(1, maxBlockSize);
     scratch_.allocate(static_cast<size_t>(scratchSize_), true);
+    publishGrains(); // the pool is empty after prepare: clears any markers the editor still shows
 }
 
 bool GrainsAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
@@ -96,19 +97,18 @@ void GrainsAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 
     if (stereo) {
         engine_.process(left, right, numSamples);
-        return;
-    }
-    // Mono host: render into the preallocated scratch right channel and discard it.
-    // Unprepared (no scratch yet): output silence instead of looping forever.
-    if (scratchSize_ <= 0 || scratch_ == nullptr) {
+    } else if (scratchSize_ <= 0 || scratch_ == nullptr) {
+        // Mono host, unprepared (no scratch yet): output silence instead of looping forever.
         buffer.clear();
-        return;
+    } else {
+        // Mono host: render into the preallocated scratch right channel and discard it.
+        for (int done = 0; done < numSamples;) {
+            const int n = std::min(scratchSize_, numSamples - done);
+            engine_.process(left + done, scratch_.get(), n);
+            done += n;
+        }
     }
-    for (int done = 0; done < numSamples;) {
-        const int n = std::min(scratchSize_, numSamples - done);
-        engine_.process(left + done, scratch_.get(), n);
-        done += n;
-    }
+    publishGrains(); // one snapshot per block, after the render
 }
 
 juce::AudioProcessorEditor* GrainsAudioProcessor::createEditor()

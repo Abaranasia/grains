@@ -92,21 +92,21 @@ Do NOT parallelise any apply task. Single writer, strictly in order:
 
 Base: PR 1 branch. No automated test exists for the processor (JUCE-dependent); correctness is guarded by the Phase 3 and 4 core tests plus Phase 10.
 
-- [ ] 7.1 `Source/plugin/PluginProcessor.h/.cpp`: add `grains::TripleBuffer<grains::GrainSnapshot> grainMailbox_`, private `publishGrains()` (`engine_.snapshotGrains(grainMailbox_.back()); grainMailbox_.publish();`), public `const grains::GrainSnapshot* pollGrains() noexcept` (returns `&front()` when `update()` is true, else nullptr).
-- [ ] 7.2 `processBlock`: restructure the two early returns into one if / else-if / else chain (stereo; mono with unprepared or null scratch clears the buffer; mono chunk loop unchanged) followed by a single `publishGrains()`. The `getNumChannels() <= 0` return stays before the chain. Engine calls and order unchanged.
-- [ ] 7.3 `prepareToPlay`: call `publishGrains()` once after `engine_.prepare` so the empty snapshot clears markers.
-- [ ] 7.4 Diff check: `SourceExchange`, `GranularEngine` render path and parameter handling untouched; Release plugin build clean.
+- [x] 7.1 `Source/plugin/PluginProcessor.h/.cpp`: add `grains::TripleBuffer<grains::GrainSnapshot> grainMailbox_`, private `publishGrains()` (`engine_.snapshotGrains(grainMailbox_.back()); grainMailbox_.publish();`), public `const grains::GrainSnapshot* pollGrains() noexcept` (returns `&front()` when `update()` is true, else nullptr).
+- [x] 7.2 `processBlock`: restructure the two early returns into one if / else-if / else chain (stereo; mono with unprepared or null scratch clears the buffer; mono chunk loop unchanged) followed by a single `publishGrains()`. The `getNumChannels() <= 0` return stays before the chain. Engine calls and order unchanged.
+- [x] 7.3 `prepareToPlay`: call `publishGrains()` once after `engine_.prepare` so the empty snapshot clears markers.
+- [x] 7.4 Diff check: `SourceExchange`, `GranularEngine` render path and parameter handling untouched; Release plugin build clean.
 
 ## Phase 8: WaveformView (R-WD-4, R-WD-7)
 
-- [ ] 8.1 `Source/plugin/WaveformView.h/.cpp`: add `std::function<const grains::GrainSnapshot*()> pollGrains` setter and a `GrainDisplayModel` member.
-- [ ] 8.2 Timer lifecycle: `startTimerHz(kPollHz)` only while `isShowing()`, display is `Waveform` and a poll function is set; re-evaluate in `visibilityChanged`, `parentHierarchyChanged` and `setWaveform`; on stop call `model.reset()`. `timerCallback` calls `model.tick(poll())` and repaints only the strip bounds when it returns true.
-- [ ] 8.3 Cached waveform image (background and peaks, or hint) rebuilt lazily in `paint` after `setWaveform` or `resized` or a physical pixel scale change; paint order: image, jitter band, dots, marker. Band and marker span the full view height (188 px).
-- [ ] 8.4 Lane-dot strip: 48 px under the 140 px waveform, `kLaneRows = 8`, `row = slot % 8`, row pitch 6 px, dot diameter 4 px, x from `position`, alpha `0.25 + 0.75 * level`, mint `0xff7ee0a1`. Draw no dots in the Empty and NoWaveform states.
+- [x] 8.1 `Source/plugin/WaveformView.h/.cpp`: add `std::function<const grains::GrainSnapshot*()> pollGrains` setter and a `GrainDisplayModel` member.
+- [x] 8.2 Timer lifecycle: `startTimerHz(kPollHz)` only while `isShowing()`, display is `Waveform` and a poll function is set; re-evaluate in `visibilityChanged`, `parentHierarchyChanged` and `setWaveform`; on stop call `model.reset()`. `timerCallback` calls `model.tick(poll())` and repaints only the strip bounds when it returns true.
+- [x] 8.3 Cached waveform image (background and peaks, or hint) rebuilt lazily in `paint` after `setWaveform` or `resized` or a physical pixel scale change; paint order: image, jitter band, dots, marker. Band and marker span the full view height (188 px).
+- [x] 8.4 Lane-dot strip: 48 px under the 140 px waveform, `kLaneRows = 8`, `row = slot % 8`, row pitch 6 px, dot diameter 4 px, x from `position`, alpha `0.25 + 0.75 * level`, mint `0xff7ee0a1`. Draw no dots in the Empty and NoWaveform states.
 
 ## Phase 9: Editor (R-WD-4)
 
-- [ ] 9.1 `Source/plugin/PluginEditor.h/.cpp`: view height 140 to 188 (editor fixed size grows by 48 px), assign the view's poll function to `proc_.pollGrains()` once in the constructor. Release build clean. Open PR 2.
+- [x] 9.1 `Source/plugin/PluginEditor.h/.cpp`: view height 140 to 188 (editor fixed size grows by 48 px), assign the view's poll function to `proc_.pollGrains()` once in the constructor. Release build clean. Open PR 2.
 
 ## Phase 10: Manual verification (Standalone and DAW)
 
@@ -117,6 +117,7 @@ Run in the Standalone (build-plugin Release `Grains.exe`) and a DAW with the VST
   - [ ] Stereo: same comparison on a stereo host layout.
 - [ ] 10.2 Lane dots (R-WD-7)
   - [ ] Dots appear in the strip under the waveform and line up with the position marker; rows are used by slot.
+  - [ ] Geometry: strip is 48 px tall under the 140 px waveform (editor 48 px taller than before), 8 rows at 6 px pitch, 4 px mint dots, newer (level 0) dots dimmer than mid-life ones; band and marker span the full 188 px.
   - [ ] No dots in the Empty ("Drop a sample") and NoWaveform states.
   - [ ] Host stopped: with the transport stopped, markers clear after about 267 ms.
   - [ ] Idle with a loaded sample and no grains: no repaint churn (no visible flicker).

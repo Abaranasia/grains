@@ -5,7 +5,7 @@
 
 namespace {
 constexpr int kBarHeight = 40;
-constexpr int kViewHeight = 140;
+constexpr int kViewHeight = WaveformView::kViewHeight; // waveform plus the lane-dot strip
 constexpr const char* kPatterns = "*.wav;*.aiff;*.aif";
 } // namespace
 
@@ -31,6 +31,7 @@ GrainsEditor::GrainsEditor(GrainsAudioProcessor& p)
                               });
     };
 
+    view_.setPollGrains([this] { return proc_.pollGrains(); });
     view_.setWaveform(proc_.waveform()); // an editor opened after a load shows the current waveform
     proc_.statusBroadcaster().addChangeListener(this);
     setResizable(false, false);
