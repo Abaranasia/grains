@@ -168,7 +168,13 @@ void GrainsAudioProcessor::onLoadResult(const SampleLoader::Result& r)
             apvts_.state.setProperty(kSampleRel, juce::String::fromUTF8(ref.relative.c_str()), nullptr);
         }
     }
-    if (r.generation < loader_.latestGeneration()) return; // superseded: only the label is filtered
+    // Results are posted in commit order, so applying every one here (before the label filter below)
+    // keeps the waveform in step with the source that is actually audible.
+    const bool waveformChanged = waveform_.apply(r.loaded, r.cleared, r.peaks);
+    if (r.generation < loader_.latestGeneration()) { // superseded: only the label is filtered
+        if (waveformChanged) broadcaster_.sendChangeMessage();
+        return;
+    }
     status_ = r.text;
     broadcaster_.sendChangeMessage();
 }

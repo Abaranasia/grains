@@ -2,10 +2,11 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "WaveformView.h"
 
 #include <juce_audio_utils/juce_audio_utils.h>
 
-// Generic parameter editor plus a Load button, drag-and-drop and a sample status label.
+// Waveform view above the generic parameter editor, plus a Load button, drag-and-drop and a sample status label.
 class GrainsEditor final : public juce::AudioProcessorEditor,
                            public juce::FileDragAndDropTarget,
                            private juce::ChangeListener {
@@ -19,9 +20,14 @@ public:
 
 private:
     static bool isSampleFile(const juce::String& path);
-    void changeListenerCallback(juce::ChangeBroadcaster*) override { status_.setText(proc_.status(), juce::dontSendNotification); }
+    void changeListenerCallback(juce::ChangeBroadcaster*) override
+    {
+        status_.setText(proc_.status(), juce::dontSendNotification);
+        view_.setWaveform(proc_.waveform());
+    }
 
     GrainsAudioProcessor& proc_;
+    WaveformView view_;
     juce::GenericAudioProcessorEditor generic_;
     juce::TextButton load_{"Load..."};
     juce::Label status_;
