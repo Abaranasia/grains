@@ -77,10 +77,11 @@ void SampleLoader::load(const grains::LoadRequest& r)
 }
 
 void SampleLoader::post(const grains::LoadRequest& r, bool loaded, const juce::String& text, const juce::String& path,
-                        bool relocated)
+                        bool relocated, std::shared_ptr<const grains::WaveformPeaks> peaks, bool cleared)
 {
     lastText_ = text.toStdString(); // loader thread only
-    Result res{r.generation, r.origin, loaded, path.isEmpty() ? fromUtf8(r.original) : path, text, relocated};
+    Result res{r.generation, r.origin, loaded, path.isEmpty() ? fromUtf8(r.original) : path, text, relocated,
+               std::move(peaks), cleared};
     juce::MessageManager::callAsync([this, alive = alive_, res = std::move(res)] {
         if (alive->load()) onResult_(res); // cleared by stop() on this same thread
     });
@@ -111,7 +112,7 @@ grains::LoadOutcome SampleLoader::loadImpl(const grains::LoadRequest& r)
         }
         if (!commitGated(r, std::move(clear))) return LoadOutcome::Aborted;
         planner_.cleared(); // after the gate released
-        post(r, false, "No sample");
+        post(r, false, "No sample", {}, false, nullptr, true);
         return LoadOutcome::Cleared;
     }
 
@@ -133,7 +134,7 @@ grains::LoadOutcome SampleLoader::loadImpl(const grains::LoadRequest& r)
             }
             if (!commitGated(r, std::move(clear))) return LoadOutcome::Aborted;
             planner_.cleared(); // after the gate released
-            post(r, false, "Missing: " + name);
+            post(r, false, "Missing: " + name, {}, false, nullptr, true);
         } else {
             post(r, false, "Error: " + name);
         }
@@ -191,6 +192,16 @@ grains::LoadOutcome SampleLoader::loadImpl(const grains::LoadRequest& r)
     truncated = truncated || built.truncated;
     const double publishedRate = built.buffer->sampleRate();
 
+    // Peaks come from the built buffer: after the commit it belongs to the audio thread. Computing them
+    // is best effort (null on allocation failure); the source is published either way.
+    std::shared_ptr<const grains::WaveformPeaks> peaks;
+    {
+        const auto frames = static_cast<std::size_t>(std::max(0, built.buffer->numFrames()));
+        const auto numCh = static_cast<std::size_t>(std::max(0, built.buffer->numChannels()));
+        const grains::ChannelView views[2] = {{built.buffer->channel(0), frames}, {built.buffer->channel(1), frames}};
+        peaks = grains::makeWaveformPeaks(views, std::min<std::size_t>(numCh, 2), grains::kDefaultPeakBuckets);
+    }
+
     auto staged = exchange_.stage(std::move(built.buffer));
     if (!staged) { // Box allocation failed: keep the previous source
         post(r, false, "Error: " + name);
@@ -205,6 +216,6 @@ grains::LoadOutcome SampleLoader::loadImpl(const grains::LoadRequest& r)
     // A Reload keeps the line it was issued with: the published label, or the failure line of the
     // request it follows up (R-SS-15). The published source's own label stays "Loaded: ...".
     const bool keepStatus = r.origin == Origin::Reload && !r.label.empty();
-    post(r, true, keepStatus ? fromUtf8(r.label) : label, loadedPath, relocated);
+    post(r, true, keepStatus ? fromUtf8(r.label) : label, loadedPath, relocated, std::move(peaks));
     return LoadOutcome::Published;
 }

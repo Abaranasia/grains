@@ -45,21 +45,39 @@ Note: budget is 800 here, not the default 400. Forecast is 800-900, so single-pr
 
 ## Phase 4: Loader and processor wiring (R-WD-3)
 
-- [ ] 4.1 `Source/plugin/SampleLoader.h/.cpp`: add `peaks`, `cleared` to `Result`; compute after `isCurrent()`, before `exchange_.stage`; `cleared` only on accepted clear commit; publish even if peaks null; redeliver on Reload (R-PS-8).
-- [ ] 4.2 `Source/plugin/PluginProcessor.h/.cpp`: `WaveformState waveform_`, `waveform()`, `parameter(id)` accessor; apply in `onLoadResult` in commit order before the label generation filter; broadcast on change.
-- [ ] 4.3 Verify `SourceExchange`, `processBlock`, engine untouched (diff check).
+- [x] 4.1 `Source/plugin/SampleLoader.h/.cpp`: add `peaks`, `cleared` to `Result`; compute after `isCurrent()`, before `exchange_.stage`; `cleared` only on accepted clear commit; publish even if peaks null; redeliver on Reload (R-PS-8).
+- [x] 4.2 `Source/plugin/PluginProcessor.h/.cpp`: `WaveformState waveform_`, `waveform()`, `parameter(id)` accessor; apply in `onLoadResult` in commit order before the label generation filter; broadcast on change.
+- [x] 4.3 Verify `SourceExchange`, `processBlock`, engine untouched (diff check).
 
 ## Phase 5: WaveformView and editor (R-WD-4, R-PS-6)
 
-- [ ] 5.1 Create `Source/plugin/WaveformView.h/.cpp`: paint columns via `columnPeak`, marker, jitter band, hints (Empty/NoWaveform); no Timer.
-- [ ] 5.2 Mouse down/drag via `xToPosition` into `ParameterAttachment(position)` with begin/end gesture; `positionJitter` attachment callback-only repaint.
-- [ ] 5.3 `Source/plugin/PluginEditor.h/.cpp`: add view above generic editor (bar 40 + view 140 + generic), `setResizable(false, false)`, pull `proc_.waveform()` in constructor, update in `changeListenerCallback`.
-- [ ] 5.4 Register `WaveformView.cpp` in `Source/plugin/CMakeLists.txt`; Release build clean (Windows).
+- [x] 5.1 Create `Source/plugin/WaveformView.h/.cpp`: paint columns via `columnPeak`, marker, jitter band, hints (Empty/NoWaveform); no Timer.
+- [x] 5.2 Mouse down/drag via `xToPosition` into `ParameterAttachment(position)` with begin/end gesture; `positionJitter` attachment callback-only repaint.
+- [x] 5.3 `Source/plugin/PluginEditor.h/.cpp`: add view above generic editor (bar 40 + view 140 + generic), `setResizable(false, false)`, pull `proc_.waveform()` in constructor, update in `changeListenerCallback`.
+- [x] 5.4 Register `WaveformView.cpp` in `Source/plugin/CMakeLists.txt`; Release build clean (Windows).
 
 ## Phase 6: Manual verification (Standalone and DAW)
 
-- [ ] 6.1 R-WD-3 scenarios: load shows waveform, stale load, failed later load keeps waveform, missing-file restore clears, rate-change redelivery, peaks failure plays, late-opened editor, bit-identical audio.
-- [ ] 6.2 R-WD-4 scenarios: click jump, drag clamp, one gesture pair in DAW automation lane, jitter band read-only, marker follows automation, empty hint, fixed size, no Timer, editor open during load.
-- [ ] 6.3 R-PS-6: 9 parameters unchanged, controls and Load UI present.
+Run in the Standalone (build-plugin Release `Grains.exe`) and in a DAW with the VST3. Use a short WAV with a clear transient plus a long one. Tick each sub-item as it passes.
+
+- [ ] 6.1 R-WD-3 scenarios
+  - [ ] Load: Load... a WAV; the waveform appears and matches the file.
+  - [ ] Stale load: request a large file then immediately a small one; only the small one's waveform stays.
+  - [ ] Failed later load: with A shown, load a corrupt/renamed non-audio `.wav`; label shows Error, A still plays and its waveform stays.
+  - [ ] Missing-file restore: save state with a sample, delete/rename the file, reload state; waveform clears, "Drop a sample" shows, label reads "Missing: <name>".
+  - [ ] Rate change: switch the audio device sample rate; after the reload the waveform is still shown and matches.
+  - [ ] Peaks failure: not reproducible without fault injection; covered by the core alloc sweep (`test_alloc_failure`). Code path: null peaks gives "No waveform" with audio unaffected.
+  - [ ] Late-opened editor: load a sample, close the editor, reopen it; the waveform is shown.
+  - [ ] Bit-identical audio: audio path files untouched (`git diff` shows no change to SourceExchange, GranularEngine, processBlock); optionally compare a rendered bounce before/after.
+- [ ] 6.2 R-WD-4 scenarios
+  - [ ] Click jump: click at ~75% width; `position` becomes ~0.75 and the marker jumps there.
+  - [ ] Drag clamp: press then drag past both edges; `position` clamps to 0 and 1.
+  - [ ] Automation: in a DAW with write mode on, press/drag/release; one gesture is recorded on the `position` lane.
+  - [ ] Jitter band: drag the Position Jitter slider; the band width follows. Dragging in the view never changes `positionJitter`.
+  - [ ] Marker follows automation: play back `position` automation; the marker moves with it.
+  - [ ] Empty hint: fresh instance shows "Drop a sample".
+  - [ ] Fixed size: the window cannot be resized; no Timer in the view (`rg Timer Source/plugin` finds nothing).
+  - [ ] Editor open during load: with the editor open, load a file and restore state; the view updates without a crash.
+- [ ] 6.3 R-PS-6: the 9 generic parameter controls, the Load button and status label are all still present and working.
 
 Spec sync not needed until archive.
