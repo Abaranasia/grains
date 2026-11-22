@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -439,6 +440,61 @@ TEST_CASE("realtime: process() performs zero allocations across Play, Stop and s
         run(6);
         e.stopNow();
         run(3);
+        allocs = scope.count();
+    }
+    CHECK(allocs == 0);
+    CHECK(peak > kSoundThreshold);
+}
+
+// R-GR-12: the scan offset is plain integer and double arithmetic. A non-zero scan, scan changes
+// (rebase in setParams, as the plugin applies them every block), wraps at both ends and the resets
+// on Play, stopNow and setSource allocate nothing. Sound is asserted so the render really ran.
+TEST_CASE("realtime: process() performs zero allocations while scanning", "[realtime][scan]")
+{
+    const SampleBuffer src(grains_test::noise(96000, 5), grains_test::noise(96000, 6), kSr);
+    const SampleBuffer other(grains_test::noise(96000, 15), grains_test::noise(96000, 16), kSr);
+    GranularEngine e;
+    e.prepare(kSr, 1); // Stopped
+    e.setSource(&src);
+    EngineParams p;
+    p.density = 80.0f;
+    p.grainSizeMs = 60.0f;
+    p.position = 0.9f;
+    p.positionJitter = 0.3f;
+    p.timingJitter = 0.3f;
+    p.scan = 1.0f;
+    e.setParams(p);
+    constexpr int kBlock = 256;
+    std::vector<float> l(kBlock), r(kBlock);
+    float* const pl = l.data();
+    float* const pr = r.data();
+    float peak = 0.0f;
+    std::size_t allocs = 0;
+    {
+        AllocationScope scope;
+        auto run = [&](int blocks) {
+            for (int i = 0; i < blocks; ++i) {
+                e.process(pl, pr, kBlock);
+                for (int k = 0; k < kBlock; ++k) peak = std::max({peak, std::abs(pl[k]), std::abs(pr[k])});
+            }
+        };
+        e.setPlaying(true);
+        run(60); // forward, wraps past the end
+        for (const float scan : {-1.0f, 0.37f, 0.0f, -0.02f, 1.0f}) {
+            p.scan = scan;
+            e.setParams(p); // rebase
+            run(30);
+        }
+        p.scan = std::numeric_limits<float>::quiet_NaN();
+        e.setParams(p); // clamps to 0
+        run(4);
+        e.setSource(&other); // reset on a new load
+        run(10);
+        e.stopNow(); // reset
+        e.setPlaying(true);
+        run(10);
+        e.setPlaying(false);
+        run(10); // fade-out completion resets
         allocs = scope.count();
     }
     CHECK(allocs == 0);

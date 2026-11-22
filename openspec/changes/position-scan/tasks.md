@@ -28,29 +28,29 @@ Note: budget is 800, not the default 400. Slice 1 alone has no user-visible effe
 
 ## Phase 1: Baseline (slice 1, base commit unchanged)
 
-- [ ] 1.1 RED/characterise: `tests/test_engine_scan.cpp` golden snapshot of start positions at scan-less params (pitch 0; `position` 1.0; jitter > 0); register in `tests/CMakeLists.txt`. Run on the unchanged base first: must pass (R-GR-12 "Zero scan is identical").
+- [x] 1.1 RED/characterise: `tests/test_engine_scan.cpp` golden snapshot of start positions at scan-less params (pitch 0; `position` 1.0; jitter > 0); register in `tests/CMakeLists.txt`. Run on the unchanged base first: must pass (R-GR-12 "Zero scan is identical").
 
 ## Phase 2: Params and clamp (R-GR-12 "Scan is clamped and NaN-safe")
 
-- [ ] 2.1 RED: `clamped()` for NaN, +/-inf, +/-1e9, -5, +5.
-- [ ] 2.2 GREEN: `Source/core/include/grains/ParamLimits.h` (`kScanMax = 1.0f`, `sanitizeScan`); `EngineParams.h` (`scan` field, default 0, clamp).
+- [x] 2.1 RED: `clamped()` for NaN, +/-inf, +/-1e9, -5, +5.
+- [x] 2.2 GREEN: `Source/core/include/grains/ParamLimits.h` (`kScanMax = 1.0f`, `sanitizeScan`); `EngineParams.h` (`scan` field, default 0, clamp).
 
 ## Phase 3: Engine offset (R-GR-12, R-GR-6)
 
-- [ ] 3.1 RED: `scanOffset()` == 0.25 after 1 s at 44.1/48/96 kHz; ramp-source start index at 48 kHz ("Offset advances", "Negative scan").
-- [ ] 3.2 GREEN: `GranularEngine.h/.cpp` counter `elapsed_`, `scanFrom_`, `scanBase_`, `offsetAt`, `wrap01`, `scanOffset()`, `spawn(elapsed_+offset)`.
-- [ ] 3.3 RED: scan 0.37 with 512 / 37 / single block bit-identical; 44.1 vs 48 kHz positions agree ("Block-split and sample-rate independence").
-- [ ] 3.4 RED: wrap 0.9+0.5 and 0.05-0.5; scan +/-1 at 0.5 s; jitter at the seam stays in [0,1] ("Wrap at both ends", "Wrap precedes jitter clamp").
-- [ ] 3.5 GREEN: spawn fold (`offset == 0.0` branch keeps anchor; fold only outside [0,1]) before jitter clamp.
-- [ ] 3.6 RED: offset equal across a scan change; offset holds when scan returns to 0 ("Scan change is continuous", "Offset holds").
-- [ ] 3.7 GREEN: rebase in `setParams()` on clamped-scan change.
+- [x] 3.1 RED: `scanOffset()` == 0.25 after 1 s at 44.1/48/96 kHz; ramp-source start index at 48 kHz ("Offset advances", "Negative scan").
+- [x] 3.2 GREEN: `GranularEngine.h/.cpp` counter `elapsed_`, `scanFrom_`, `scanBase_`, `offsetAt`, `wrap01`, `scanOffset()`, `spawn(elapsed_+offset)`.
+- [x] 3.3 RED: scan 0.37 with 512 / 37 / single block bit-identical; 44.1 vs 48 kHz positions agree ("Block-split and sample-rate independence").
+- [x] 3.4 RED: wrap 0.9+0.5 and 0.05-0.5; scan +/-1 at 0.5 s; jitter at the seam stays in [0,1] ("Wrap at both ends", "Wrap precedes jitter clamp").
+- [x] 3.5 GREEN: spawn fold (`offset == 0.0` branch keeps anchor; fold only outside [0,1]) before jitter clamp.
+- [x] 3.6 RED: offset equal across a scan change; offset holds when scan returns to 0 ("Scan change is continuous", "Offset holds").
+- [x] 3.7 GREEN: rebase in `setParams()` on clamped-scan change.
 
 ## Phase 4: Resets (transport-gate R-TG-4)
 
-- [ ] 4.1 RED: Play, `stopNow`, `setSource`, `prepare` reset; second Play bit-identical; redundant Play keeps offset ("Play resets", "Redundant Play keeps", "New load resets").
-- [ ] 4.2 GREEN: reset counters wherever the scheduler resets (prepare, stopNow, Play restart, fade-out completion, setSource).
-- [ ] 4.3 RED then GREEN: `tests/test_engine_realtime.cpp` zero allocations at non-zero scan (expect no code change).
-- [ ] 4.4 Gate: slice 1 green, golden 1.1 still bit-identical, R-BH-1 JUCE-free check.
+- [x] 4.1 RED: Play, `stopNow`, `setSource`, `prepare` reset; second Play bit-identical; redundant Play keeps offset ("Play resets", "Redundant Play keeps", "New load resets").
+- [x] 4.2 GREEN: reset counters wherever the scheduler resets (prepare, stopNow, Play restart, fade-out completion, setSource).
+- [x] 4.3 RED then GREEN: `tests/test_engine_realtime.cpp` zero allocations at non-zero scan (expect no code change).
+- [x] 4.4 Gate: slice 1 green, golden 1.1 still bit-identical, R-BH-1 JUCE-free check.
 
 ## Phase 5: Parameter layer and plugin (slice 2; R-PM-1, R-PM-3, R-PS-3, R-PS-7)
 

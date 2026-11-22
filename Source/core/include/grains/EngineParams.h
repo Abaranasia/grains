@@ -16,6 +16,7 @@ struct EngineParams {
     float timingJitter = 0.0f;                   // 0-1
     float panSpread = 0.0f;                      // 0-1, 0 = centre
     float gain = limits::kGainDefault;           // 0-2
+    float scan = 0.0f;                           // +-1 source lengths/s, 0 = static anchor
 
     // Every field clamped to its documented range; NaN becomes the field default.
     EngineParams clamped() const noexcept
@@ -31,6 +32,7 @@ struct EngineParams {
         c.timingJitter = limits::sanitizeUnit(timingJitter, d.timingJitter);
         c.panSpread = limits::sanitizeUnit(panSpread, d.panSpread);
         c.gain = limits::sanitizeGain(gain);
+        c.scan = limits::sanitizeScan(scan);
         return c;
     }
 };

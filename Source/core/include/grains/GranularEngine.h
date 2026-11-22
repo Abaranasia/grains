@@ -92,6 +92,10 @@ public:
     // Read-only introspection (tests): grains currently playing, at most GrainPool::kCapacity.
     int activeGrainCount() const noexcept { return pool_.activeCount(); }
 
+    // Read-only introspection (tests): the scan offset, in source lengths, at the current sample
+    // (R-GR-12). Not wrapped: it is the travelled distance plus the base.
+    double scanOffset() const noexcept { return offsetAt(elapsed_); }
+
     // Display introspection (R-GR-11, R-WD-5): copies the active grains into `out` (count ==
     // activeGrainCount()). A pure reader of the pool, source and window: it never changes the
     // render, the RNG or the pool, and it never allocates. Call it between process() calls.
@@ -99,7 +103,11 @@ public:
 
 private:
     void renderSegment(float* left, float* right, int offset, int count) noexcept;
-    void spawn() noexcept;
+    // `at` is the absolute output sample of the spawn (elapsed_ + offset in the block).
+    void spawn(std::int64_t at) noexcept;
+    double offsetAt(std::int64_t at) const noexcept;
+    // Back to offset 0 at counter 0. Called wherever the scheduler restarts, and on a new source.
+    void resetScan() noexcept;
 
     Rng rng_;
     GrainScheduler scheduler_;
@@ -111,6 +119,12 @@ private:
     TransportGate gate_;
     std::uint64_t seed_ = 1;
     bool target_ = false;
+
+    // Scan timeline (R-GR-12): an integer sample counter that mirrors the scheduler's, so the offset
+    // never depends on block boundaries. offset(t) = scanBase_ + scan * (t - scanFrom_) / sampleRate_.
+    std::int64_t elapsed_ = 0;
+    std::int64_t scanFrom_ = 0;
+    double scanBase_ = 0.0;
 };
 
 } // namespace grains
