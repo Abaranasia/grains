@@ -209,7 +209,7 @@ TEST_CASE("soft_limiter: block-split invariance holds above the knee", "[soft_li
     const SampleBuffer dc(std::vector<float>(200000, 1.0f), {}, 48000.0);
     auto run = [&](int block) {
         GranularEngine e;
-        e.prepare(48000.0, 1);
+        e.prepare(48000.0, 1, grains::InitialTransport::Playing);
         e.setSource(&dc);
         EngineParams p;
         p.density = 200.0f;

@@ -4,6 +4,7 @@
 #include <grains/WaveformGeometry.h>
 
 #include <algorithm>
+#include <utility>
 
 namespace {
 const juce::Colour kBackground{0xff1b1e23};
@@ -11,6 +12,11 @@ const juce::Colour kWave{0xff6fb3d9};
 const juce::Colour kBand{0x40ffc857};
 const juce::Colour kMarker{0xffffc857};
 const juce::Colour kHint{0xff8a9099};
+const juce::Colour kDot{0xff7ee0a1};
+constexpr int kLaneRows = 8;
+constexpr float kRowPitch = 6.0f; // kLaneRows * kRowPitch == WaveformView::kStripHeight
+constexpr float kDotSize = 4.0f;
+static_assert(kLaneRows * static_cast<int>(kRowPitch) == WaveformView::kStripHeight);
 
 float clampPeak(float v) { return std::clamp(v, -1.0f, 1.0f); }
 } // namespace
@@ -23,24 +29,77 @@ WaveformView::WaveformView(juce::RangedAudioParameter& position, juce::RangedAud
     jitterAttachment_.sendInitialUpdate();
 }
 
+WaveformView::~WaveformView()
+{
+    stopTimer();
+}
+
 void WaveformView::setWaveform(const grains::WaveformState& state)
 {
     peaks_ = state.peaks;
     display_ = state.display();
+    imageDirty_ = true;
+    model_.reset(); // marks of the previous source must not outlive it
+    updateTimer();
     repaint();
 }
 
-void WaveformView::paint(juce::Graphics& g)
+void WaveformView::setPollGrains(std::function<const grains::GrainSnapshot*()> poll)
 {
-    g.fillAll(kBackground);
-    const auto w = static_cast<float>(getWidth());
-    const auto h = static_cast<float>(getHeight());
+    pollGrains_ = std::move(poll);
+    updateTimer();
+}
 
-    if (display_ == grains::WaveformDisplay::Waveform && peaks_ != nullptr) {
-        const float mid = h * 0.5f;
+void WaveformView::resized()
+{
+    imageDirty_ = true;
+}
+
+void WaveformView::visibilityChanged()
+{
+    updateTimer();
+}
+
+void WaveformView::parentHierarchyChanged()
+{
+    updateTimer();
+}
+
+// The timer runs only while the view is visible, shows a waveform and can poll. Stopping drops the marks.
+void WaveformView::updateTimer()
+{
+    const bool wanted = isShowing() && showsWaveform() && static_cast<bool>(pollGrains_);
+    if (wanted) {
+        if (!isTimerRunning()) startTimerHz(grains::GrainDisplayModel::kPollHz);
+    } else if (isTimerRunning()) {
+        stopTimer();
+        const bool hadMarks = model_.shown().count > 0;
+        model_.reset();
+        if (hadMarks) repaint(stripBounds());
+    }
+}
+
+void WaveformView::timerCallback()
+{
+    if (model_.tick(pollGrains_ ? pollGrains_() : nullptr)) repaint(stripBounds());
+}
+
+void WaveformView::rebuildImage(float scale)
+{
+    const int w = getWidth();
+    const int h = getHeight();
+    const int waveH = h - kStripHeight;
+    image_ = juce::Image(juce::Image::ARGB, std::max(1, juce::roundToInt(static_cast<float>(w) * scale)),
+                         std::max(1, juce::roundToInt(static_cast<float>(h) * scale)), true);
+    juce::Graphics g(image_);
+    g.addTransform(juce::AffineTransform::scale(scale));
+    g.fillAll(kBackground);
+
+    if (showsWaveform()) {
+        const float mid = static_cast<float>(waveH) * 0.5f;
         g.setColour(kWave);
-        for (int x = 0; x < getWidth(); ++x) {
-            const auto pk = grains::columnPeak(*peaks_, x, getWidth());
+        for (int x = 0; x < w; ++x) {
+            const auto pk = grains::columnPeak(*peaks_, x, w);
             const float top = mid - clampPeak(pk.max) * mid;
             const float bottom = mid - clampPeak(pk.min) * mid;
             g.drawVerticalLine(x, top, std::max(bottom, top + 1.0f)); // at least one pixel so silence shows a line
@@ -49,14 +108,39 @@ void WaveformView::paint(juce::Graphics& g)
         g.setColour(kHint);
         g.setFont(14.0f);
         g.drawText(display_ == grains::WaveformDisplay::NoWaveform ? "No waveform" : "Drop a sample",
-                   getLocalBounds(), juce::Justification::centred);
+                   juce::Rectangle<int>(0, 0, w, waveH), juce::Justification::centred);
     }
+    imageDirty_ = false;
+}
+
+void WaveformView::paint(juce::Graphics& g)
+{
+    const auto w = static_cast<float>(getWidth());
+    const auto h = static_cast<float>(getHeight());
+
+    // Rebuilt after setWaveform / resized, or when the physical pixel scale changed (display move).
+    const float scale = static_cast<float>(g.getInternalContext().getPhysicalPixelScaleFactor());
+    if (imageDirty_ || !image_.isValid() || image_.getWidth() != std::max(1, juce::roundToInt(w * scale)))
+        rebuildImage(scale);
+    g.drawImage(image_, getLocalBounds().toFloat());
 
     const auto band = grains::jitterBand(position_, jitter_);
     const float lo = grains::positionToX(band.lo, w);
     const float hi = grains::positionToX(band.hi, w);
     g.setColour(kBand);
     g.fillRect(lo, 0.0f, hi - lo, h);
+
+    if (showsWaveform()) { // no dots in the Empty and NoWaveform states
+        const auto& shown = model_.shown();
+        const float stripTop = h - static_cast<float>(kStripHeight);
+        for (int i = 0; i < shown.count; ++i) {
+            const auto& m = shown.marks[static_cast<std::size_t>(i)];
+            const float cx = grains::positionToX(m.position, w);
+            const float cy = stripTop + static_cast<float>(m.slot % kLaneRows) * kRowPitch + kRowPitch * 0.5f;
+            g.setColour(kDot.withAlpha(0.25f + 0.75f * m.level));
+            g.fillEllipse(cx - kDotSize * 0.5f, cy - kDotSize * 0.5f, kDotSize, kDotSize);
+        }
+    }
 
     const float x = grains::positionToX(position_, w);
     g.setColour(kMarker);

@@ -82,8 +82,8 @@ TEST_CASE("engine_pool_full: skipped spawns leave the 128 active grains untouche
         REQUIRE(window % kBlock == 0);
 
         GranularEngine a, b;
-        a.prepare(kSr, 31);
-        b.prepare(kSr, 31);
+        a.prepare(kSr, 31, grains::InitialTransport::Playing);
+        b.prepare(kSr, 31, grains::InitialTransport::Playing);
         a.setSource(&src);
         b.setSource(&src);
         a.setParams(p);

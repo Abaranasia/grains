@@ -63,7 +63,7 @@ TEST_CASE("engine_extremes: parameter grid stays finite and within the ceiling",
                 for (float position : positions) {
                     INFO("size=" << size << " pitch=" << pitch << " density=" << density << " position=" << position);
                     GranularEngine e;
-                    e.prepare(48000.0, 17);
+                    e.prepare(48000.0, 17, grains::InitialTransport::Playing);
                     e.setSource(&src);
                     EngineParams p;
                     p.grainSizeMs = size;
@@ -95,7 +95,7 @@ TEST_CASE("engine_extremes: pitch beyond +-24 st renders bit-identical to +-24",
     const SampleBuffer src(noise(30000, 21), {}, 48000.0);
     auto run = [&](float pitch) {
         GranularEngine e;
-        e.prepare(48000.0, 5);
+        e.prepare(48000.0, 5, grains::InitialTransport::Playing);
         e.setSource(&src);
         EngineParams p;
         p.density = 100.0f;
@@ -141,7 +141,7 @@ TEST_CASE("engine_extremes: pitch plus jitter is clamped to +-24 st when a grain
         for (std::uint64_t seed = 1; seed <= 16; ++seed) {
             INFO("seed=" << seed);
             GranularEngine e;
-            e.prepare(48000.0, seed);
+            e.prepare(48000.0, seed, grains::InitialTransport::Playing);
             e.setSource(&src);
             EngineParams p;
             p.density = 0.1f; // one grain at sample 0
@@ -182,7 +182,7 @@ TEST_CASE("engine_extremes: 1 s of raw worst-case values stays finite and bounde
         for (float position : {-1.0f, 2.0f}) {
             INFO("pitch=" << pitch << " position=" << position);
             GranularEngine e;
-            e.prepare(48000.0, 17);
+            e.prepare(48000.0, 17, grains::InitialTransport::Playing);
             e.setSource(&src);
             EngineParams p;
             p.grainSizeMs = 1.0e9f;
@@ -211,7 +211,7 @@ TEST_CASE("engine_extremes: sample rates 22.05 kHz to 192 kHz stay finite and bo
     for (double sr : {22050.0, 44100.0, 48000.0, 96000.0, 192000.0}) {
         INFO("sr=" << sr);
         GranularEngine e;
-        e.prepare(sr, 3);
+        e.prepare(sr, 3, grains::InitialTransport::Playing);
         e.setSource(&src);
         EngineParams p;
         p.density = 400.0f;
@@ -245,7 +245,7 @@ TEST_CASE("engine_extremes: sub-threshold and subnormal sources never yield deno
     for (const Case& c : cases) {
         const SampleBuffer src(c.data, {}, 48000.0);
         GranularEngine e;
-        e.prepare(48000.0, 4);
+        e.prepare(48000.0, 4, grains::InitialTransport::Playing);
         e.setSource(&src);
         EngineParams p;
         p.density = 300.0f;
@@ -266,7 +266,7 @@ TEST_CASE("engine_extremes: worst-case coherent DC saturates softly below the ce
     const SampleBuffer dc(std::vector<float>(200000, 1.0f), {}, 48000.0);
     auto run = [&](float gain) {
         GranularEngine e;
-        e.prepare(48000.0, 1);
+        e.prepare(48000.0, 1, grains::InitialTransport::Playing);
         e.setSource(&dc);
         EngineParams p;
         p.density = 200.0f; // density * size = 200 > 128 pool slots: the pool saturates
