@@ -31,13 +31,25 @@ float GranularEngine::softLimit(float y) noexcept
     return y < 0.0f ? -m : m;
 }
 
-void GranularEngine::prepare(double sampleRate, std::uint64_t seed) noexcept
+void GranularEngine::prepare(double sampleRate, std::uint64_t seed, InitialTransport initial) noexcept
 {
     sampleRate_ = limits::sanitizeSampleRate(sampleRate);
+    seed_ = seed;
     rng_.seed(seed);
+    gate_.prepare(sampleRate_);
+    target_ = initial == InitialTransport::Playing;
+    if (target_) gate_.forcePlaying();
     pool_.reset();
     scheduler_.reset();
     scheduler_.configure(sampleRate_, params_.density, params_.timingJitter);
+}
+
+void GranularEngine::stopNow() noexcept
+{
+    gate_.forceStopped();
+    target_ = false;
+    pool_.reset();
+    scheduler_.reset();
 }
 
 void GranularEngine::setSource(const SampleBuffer* source) noexcept
@@ -55,9 +67,17 @@ void GranularEngine::setParams(const EngineParams& params) noexcept
 void GranularEngine::process(float* left, float* right, int n) noexcept
 {
     if (n <= 0) return;
+    // The target is read once per call (block-quantised). Only Stopped -> Starting restarts: the
+    // state is then identical to prepare(), so every Play reproduces the same output.
+    if (gate_.request(target_)) {
+        rng_.seed(seed_);
+        pool_.reset();
+        scheduler_.reset();
+    }
     std::fill(left, left + n, 0.0f);
     std::fill(right, right + n, 0.0f);
     if (source_ == nullptr || source_->numFrames() <= 0 || source_->numChannels() <= 0) return;
+    if (gate_.stopped()) return; // no scheduling, no rng draws, no rendering
 
     int cursor = 0;
     scheduler_.advance(n, [&](int offset) {
@@ -66,6 +86,12 @@ void GranularEngine::process(float* left, float* right, int n) noexcept
         spawn();
     });
     renderSegment(left, right, cursor, n - cursor);
+
+    gate_.apply(left, right, n); // before the limiter, so |y| < 1 holds during ramps
+    if (gate_.stopped()) {       // the fade-out completed in this call: drop what is left
+        pool_.reset();
+        scheduler_.reset();
+    }
 
     for (int i = 0; i < n; ++i) {
         left[i] = softLimit(left[i]);

@@ -9,7 +9,8 @@
 // Waveform view above the generic parameter editor, plus a Load button, drag-and-drop and a sample status label.
 class GrainsEditor final : public juce::AudioProcessorEditor,
                            public juce::FileDragAndDropTarget,
-                           private juce::ChangeListener {
+                           private juce::ChangeListener,
+                           private juce::Timer {
 public:
     explicit GrainsEditor(GrainsAudioProcessor& p);
     ~GrainsEditor() override;
@@ -24,12 +25,19 @@ private:
     {
         status_.setText(proc_.status(), juce::dontSendNotification);
         view_.setWaveform(proc_.waveform());
+        syncTransport();
     }
+    void timerCallback() override { syncTransport(); }
+    // Mirrors the processor into the buttons. Writes only on change and never notifies, so a sync cannot
+    // raise a Play/Stop request.
+    void syncTransport();
 
     GrainsAudioProcessor& proc_;
     WaveformView view_;
     juce::GenericAudioProcessorEditor generic_;
     juce::TextButton load_{"Load..."};
+    juce::TextButton play_{"Play"};
+    juce::TextButton stop_{"Stop"};
     juce::Label status_;
     std::unique_ptr<juce::FileChooser> chooser_;
 

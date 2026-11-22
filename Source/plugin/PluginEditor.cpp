@@ -5,6 +5,8 @@
 
 namespace {
 constexpr int kBarHeight = 40;
+constexpr int kTransportPollHz = 10;
+constexpr int kTransportButtonWidth = 64;
 constexpr int kViewHeight = WaveformView::kViewHeight; // waveform plus the lane-dot strip
 constexpr const char* kPatterns = "*.wav;*.aiff;*.aif";
 } // namespace
@@ -18,7 +20,16 @@ GrainsEditor::GrainsEditor(GrainsAudioProcessor& p)
     addAndMakeVisible(view_);
     addAndMakeVisible(generic_);
     addAndMakeVisible(load_);
+    addAndMakeVisible(play_);
+    addAndMakeVisible(stop_);
     addAndMakeVisible(status_);
+    for (auto* b : {&play_, &stop_}) {
+        b->setClickingTogglesState(true);
+        b->setRadioGroupId(1);
+        b->setEnabled(false);
+    }
+    play_.onClick = [this] { proc_.setPlaying(true); };
+    stop_.onClick = [this] { proc_.setPlaying(false); };
     status_.setText(proc_.status(), juce::dontSendNotification);
 
     load_.onClick = [this] {
@@ -34,13 +45,26 @@ GrainsEditor::GrainsEditor(GrainsAudioProcessor& p)
     view_.setPollGrains([this] { return proc_.pollGrains(); });
     view_.setWaveform(proc_.waveform()); // an editor opened after a load shows the current waveform
     proc_.statusBroadcaster().addChangeListener(this);
+    syncTransport();
+    startTimerHz(kTransportPollHz);
     setResizable(false, false);
     setSize(generic_.getWidth(), generic_.getHeight() + kBarHeight + kViewHeight);
 }
 
 GrainsEditor::~GrainsEditor()
 {
+    stopTimer();
     proc_.statusBroadcaster().removeChangeListener(this);
+}
+
+void GrainsEditor::syncTransport()
+{
+    const bool loaded = proc_.waveform().hasSample;
+    const bool playing = loaded && proc_.isPlaying();
+    if (play_.isEnabled() != loaded) play_.setEnabled(loaded);
+    if (stop_.isEnabled() != loaded) stop_.setEnabled(loaded);
+    if (play_.getToggleState() != playing) play_.setToggleState(playing, juce::dontSendNotification);
+    if (stop_.getToggleState() == playing) stop_.setToggleState(!playing, juce::dontSendNotification);
 }
 
 void GrainsEditor::resized()
@@ -48,6 +72,8 @@ void GrainsEditor::resized()
     auto area = getLocalBounds();
     auto bar = area.removeFromTop(kBarHeight).reduced(4);
     load_.setBounds(bar.removeFromLeft(100));
+    play_.setBounds(bar.removeFromLeft(kTransportButtonWidth));
+    stop_.setBounds(bar.removeFromLeft(kTransportButtonWidth));
     status_.setBounds(bar.reduced(8, 0));
     view_.setBounds(area.removeFromTop(kViewHeight));
     generic_.setBounds(area);

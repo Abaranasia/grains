@@ -83,7 +83,7 @@ TEST_CASE("snapshot: count equals the active grains and every mark is normalised
 {
     const SampleBuffer src = makeSource(1);
     GranularEngine e;
-    e.prepare(kSr, 1);
+    e.prepare(kSr, 1, grains::InitialTransport::Playing);
     e.setSource(&src);
     e.setParams(longGrains(30.0f));
     const grains::WindowTable window;
@@ -116,7 +116,7 @@ TEST_CASE("snapshot: marks stay normalised at extreme parameters", "[grain_snaps
         for (float pitch : {-24.0f, 24.0f})
             for (float size : {1.0f, 1000.0f}) {
                 GranularEngine e;
-                e.prepare(kSr, 3);
+                e.prepare(kSr, 3, grains::InitialTransport::Playing);
                 e.setSource(&src);
                 EngineParams p;
                 p.position = position;
@@ -149,7 +149,7 @@ TEST_CASE("snapshot: the position clamps at the end of the buffer", "[grain_snap
 {
     const SampleBuffer src = makeSource(3, 48000);
     GranularEngine e;
-    e.prepare(kSr, 4);
+    e.prepare(kSr, 4, grains::InitialTransport::Playing);
     e.setSource(&src);
     EngineParams p = longGrains(40.0f);
     p.position = 0.9f;
@@ -175,7 +175,7 @@ TEST_CASE("snapshot: slots are distinct, ordered and stable while a grain lives"
 {
     const SampleBuffer src = makeSource(4);
     GranularEngine e;
-    e.prepare(kSr, 5);
+    e.prepare(kSr, 5, grains::InitialTransport::Playing);
     e.setSource(&src);
     e.setParams(longGrains(20.0f));
     const float perBlock = static_cast<float>(kBlock) / 48000.0f; // length is 1000 ms = 48000 samples
@@ -206,14 +206,14 @@ TEST_CASE("snapshot: no source, an empty source or density 0 give an empty snaps
     dirty.count = 5; // stale content must be overwritten, not appended to
 
     GranularEngine none;
-    none.prepare(kSr, 1);
+    none.prepare(kSr, 1, grains::InitialTransport::Playing);
     none.snapshotGrains(dirty);
     CHECK(dirty.count == 0);
     CHECK(dirty.version == GrainSnapshot::kVersion);
 
     const SampleBuffer empty(std::vector<float>{}, std::vector<float>{}, kSr);
     GranularEngine emptySrc;
-    emptySrc.prepare(kSr, 1);
+    emptySrc.prepare(kSr, 1, grains::InitialTransport::Playing);
     emptySrc.setSource(&empty);
     run(emptySrc, 4);
     dirty.count = 5;
@@ -222,7 +222,7 @@ TEST_CASE("snapshot: no source, an empty source or density 0 give an empty snaps
 
     const SampleBuffer src = makeSource(5);
     GranularEngine silent;
-    silent.prepare(kSr, 1);
+    silent.prepare(kSr, 1, grains::InitialTransport::Playing);
     silent.setSource(&src);
     silent.setParams(longGrains(0.0f));
     run(silent, 20);
@@ -235,7 +235,7 @@ TEST_CASE("snapshot: a saturated pool fills every slot exactly once", "[grain_sn
 {
     const SampleBuffer src = makeSource(6);
     GranularEngine e;
-    e.prepare(kSr, 2);
+    e.prepare(kSr, 2, grains::InitialTransport::Playing);
     e.setSource(&src);
     EngineParams p = longGrains(1000.0f);
     p.position = 0.1f;
@@ -252,7 +252,7 @@ TEST_CASE("snapshot: setSource and prepare empty the snapshot", "[grain_snapshot
     const SampleBuffer a = makeSource(7);
     const SampleBuffer b = makeSource(8);
     GranularEngine e;
-    e.prepare(kSr, 1);
+    e.prepare(kSr, 1, grains::InitialTransport::Playing);
     e.setSource(&a);
     e.setParams(longGrains(100.0f));
 
@@ -263,7 +263,7 @@ TEST_CASE("snapshot: setSource and prepare empty the snapshot", "[grain_snapshot
 
     run(e, 20);
     REQUIRE(snap(e).count > 0);
-    e.prepare(kSr, 1);
+    e.prepare(kSr, 1, grains::InitialTransport::Playing);
     CHECK(snap(e).count == 0);
 }
 
@@ -280,7 +280,7 @@ Run renderBlocks(bool snapshotting, int extraSnapshots, int blocks)
 {
     const SampleBuffer src = makeSource(9);
     GranularEngine e;
-    e.prepare(kSr, 77);
+    e.prepare(kSr, 77, grains::InitialTransport::Playing);
     e.setSource(&src);
     EngineParams p;
     p.density = 60.0f;

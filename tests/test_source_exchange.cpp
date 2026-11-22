@@ -348,7 +348,7 @@ TEST_CASE("exchange: swapping the engine source drops active grains and a clear 
     grains::SourceExchange<grains::SampleBuffer> x;
     x.publish(std::make_unique<grains::SampleBuffer>(grains_test::noise(48000, 1), grains_test::noise(48000, 2), kSr));
     grains::GranularEngine e;
-    e.prepare(kSr, 1);
+    e.prepare(kSr, 1, grains::InitialTransport::Playing);
     grains::EngineParams p;
     p.density = 100.0f;
     p.grainSizeMs = 200.0f;
