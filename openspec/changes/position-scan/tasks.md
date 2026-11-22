@@ -54,11 +54,11 @@ Note: budget is 800, not the default 400. Slice 1 alone has no user-visible effe
 
 ## Phase 5: Parameter layer and plugin (slice 2; R-PM-1, R-PM-3, R-PS-3, R-PS-7)
 
-- [ ] 5.1 RED: `tests/test_param_spec.cpp` 10 ids with `scan` last; range/default; default <-> 0.5 exact; plain at 0.25 below 0.5 in magnitude; symmetric round trip vs JUCE formula; field routing; extremes clamp-stable.
-- [ ] 5.2 GREEN: `ParamSpec.h` `Id::Scan` after `Gain`, trailing `bool symmetric = false; int versionHint = 1;`, scan `{"scan","Scan","len/s",-1,1,0,0.4f,true,2}`, symmetric `toNormalised`/`fromNormalised`, map to `EngineParams::scan`.
-- [ ] 5.3 `Source/plugin/PluginProcessor.cpp`: `createLayout` passes `NormalisableRange(min,max,0,skew,symmetric)` and `ParameterID{id, versionHint}`.
-- [ ] 5.4 RED then GREEN (Catch2 where the processor is testable): pre-scan state with scan set non-zero restores to 0; `setStateInformation` appends `PARAM{id, def}` for every missing `kSpecs` id before `replaceState` ("Pre-scan state restores").
-- [ ] 5.5 Gate: full `grains_tests` and Release plugin build clean (Windows).
+- [x] 5.1 RED: `tests/test_param_spec.cpp` 10 ids with `scan` last; range/default; default <-> 0.5 exact; plain at 0.25 below 0.5 in magnitude; symmetric round trip vs JUCE formula; field routing; extremes clamp-stable.
+- [x] 5.2 GREEN: `ParamSpec.h` `Id::Scan` after `Gain`, trailing `bool symmetric = false; int versionHint = 1;`, scan `{"scan","Scan","len/s",-1,1,0,0.4f,true,2}`, symmetric `toNormalised`/`fromNormalised`, map to `EngineParams::scan`.
+- [x] 5.3 `Source/plugin/PluginProcessor.cpp`: `createLayout` passes `NormalisableRange(min,max,0,skew,symmetric)` and `ParameterID{id, versionHint}`.
+- [x] 5.4 (GREEN only; the processor is not Catch2-testable, the restore check stays manual as 6.4) RED then GREEN (Catch2 where the processor is testable): pre-scan state with scan set non-zero restores to 0; `setStateInformation` appends `PARAM{id, def}` for every missing `kSpecs` id before `replaceState` ("Pre-scan state restores").
+- [x] 5.5 Gate: full `grains_tests` and Release plugin build clean (Windows).
 
 ## Phase 6: Manual verification (Standalone and DAW)
 
@@ -70,5 +70,5 @@ Note: budget is 800, not the default 400. Slice 1 alone has no user-visible effe
 
 ## Phase 7: Docs
 
-- [ ] 7.1 Update README/parameter docs for `scan` (units, range, wrap, reset on Play/load), if present.
+- [x] 7.1 Update README/parameter docs for `scan` (units, range, wrap, reset on Play/load), if present. N/A: the README has no parameter documentation.
 - [ ] 7.2 Fold spec deltas into `openspec/specs/**` at archive; confirm "Needs design confirmation" note in plugin-shell R-PS-7 is resolved by 5.4.

@@ -37,6 +37,24 @@ juce::String prop(const juce::ValueTree& tree, const juce::Identifier& id)
 {
     return tree.getProperty(id).toString();
 }
+
+// APVTS::replaceState gives a parameter that has no child in the incoming tree the current live value,
+// not its default. State saved before a parameter existed (for example `scan`) would then keep whatever
+// the running instance held. Add an explicit default entry for every table id the state lacks.
+void addMissingParamDefaults(juce::ValueTree& state)
+{
+    const juce::Identifier paramType{"PARAM"};
+    const juce::Identifier idProp{"id"};
+    const juce::Identifier valueProp{"value"};
+    for (const auto& s : pm::kSpecs) {
+        const juce::String id{s.id};
+        if (state.getChildWithProperty(idProp, id).isValid()) continue;
+        juce::ValueTree child{paramType};
+        child.setProperty(idProp, id, nullptr);
+        child.setProperty(valueProp, s.def, nullptr);
+        state.appendChild(child, nullptr);
+    }
+}
 } // namespace
 
 GrainsAudioProcessor::GrainsAudioProcessor()
@@ -53,8 +71,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainsAudioProcessor::create
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
     for (const auto& s : pm::kSpecs) {
         layout.add(std::make_unique<juce::AudioParameterFloat>(
-            juce::ParameterID{s.id, 1}, s.name,
-            juce::NormalisableRange<float>(s.min, s.max, 0.0f, s.skew), s.def,
+            juce::ParameterID{s.id, s.versionHint}, s.name,
+            juce::NormalisableRange<float>(s.min, s.max, 0.0f, s.skew, s.symmetric), s.def,
             juce::AudioParameterFloatAttributes().withLabel(s.unit)));
     }
     return layout;
@@ -134,7 +152,9 @@ void GrainsAudioProcessor::setStateInformation(const void* data, int sizeInBytes
     if (const auto xml = getXmlFromBinary(data, sizeInBytes))
         if (xml->hasTagName(apvts_.state.getType()))
         {
-            apvts_.replaceState(juce::ValueTree::fromXml(*xml));
+            auto incoming = juce::ValueTree::fromXml(*xml);
+            addMissingParamDefaults(incoming);
+            apvts_.replaceState(incoming);
             playing_.store(false, std::memory_order_relaxed); // restore always starts Stopped
             const auto ref = grains::SamplePathResolver::restoreRef(
                 prop(apvts_.state, kSamplePath).toStdString(), prop(apvts_.state, kSampleName).toStdString(),
