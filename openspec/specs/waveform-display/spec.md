@@ -113,7 +113,7 @@ Peaks MUST be computed on the loader thread (never on the audio or message threa
 - Then the output is bit-identical
 
 ### R-WD-4 Waveform view
-The editor MUST show a `WaveformView` above the generic parameter editor, displaying the full sample (no zoom or scroll) as mixed mono min/max peaks, a `position` marker, and a read-only jitter band derived from `position` and `positionJitter` via `WaveformGeometry`. Mouse down in the view MUST set `position` to the clicked x (absolute jump) and subsequent drag MUST continue to update `position` from the pointer x (clamped to [0, 1]). The drag MUST drive the `position` parameter through a `juce::ParameterAttachment`, calling begin-change-gesture on mouse down and end-change-gesture on mouse up so host automation records the move. The view MUST NOT change any parameter other than `position` (the jitter band is not draggable). The marker and band MUST follow `position` and `positionJitter` changes from automation or the generic sliders. When no peaks are available, the view MUST show a "drop a sample" hint if no sample is loaded, and a "no waveform" indication if a sample is loaded without peaks. The static layers (waveform, jitter band, `position` marker) MUST stay change-driven: they MUST repaint only on change (parameter, peaks, or resize) and MUST be cached so a live tick does not recompute them. The view MAY own a poll timer at a single named rate constant of 30 Hz, and that timer MUST run only while the view is showing, a waveform is displayed (Waveform state) and a poll function is set (started when all three hold, stopped on hide, on leaving the Waveform state, and on destruction). A timer tick MUST request a repaint only when a fresh grain frame was received or when the display model transitions to stale (R-WD-7); otherwise it MUST NOT repaint. The editor window size MUST be fixed (not resizable), taller than before to fit the view and the lane strip; all existing editor elements remain.
+The editor MUST show a `WaveformView` above the generic parameter editor, displaying the full sample (no zoom or scroll) as mixed mono min/max peaks, a `position` marker, and a read-only jitter band derived from `position` and `positionJitter` via `WaveformGeometry`. Mouse down in the view MUST set `position` to the clicked x (absolute jump) and subsequent drag MUST continue to update `position` from the pointer x (clamped to [0, 1]). The drag MUST drive the `position` parameter through a `juce::ParameterAttachment`, calling begin-change-gesture on mouse down and end-change-gesture on mouse up so host automation records the move. The view MUST NOT change any parameter other than `position` (the jitter band is not draggable). The marker and band MUST follow `position` and `positionJitter` changes from automation or the generic sliders. When no peaks are available, the view MUST show a "drop a sample" hint if no sample is loaded, and a "no waveform" indication if a sample is loaded without peaks. The static layers (waveform, jitter band, `position` marker) MUST stay change-driven: they MUST repaint only on change (parameter, peaks, or resize) and MUST be cached so a live tick does not recompute them. The view MAY own a poll timer at a single named rate constant of 30 Hz, and that timer MUST run only while the view is showing, a waveform is displayed (Waveform state) and a poll function is set (started when all three hold, stopped on hide, on leaving the Waveform state, and on destruction). A timer tick MUST request a repaint only when a fresh grain frame was received that changes what is displayed, or when the display model transitions to stale (R-WD-7); otherwise it MUST NOT repaint. A fresh frame with `count == 0` received while no markers are displayed (for example the empty snapshot published every block while the transport is Stopped) does not change what is displayed and MUST NOT cause a repaint. The editor window size MUST be fixed (not resizable), taller than before to fit the view and the lane strip; all existing editor elements remain.
 
 #### Scenario: Click jumps position [Manual]
 - Given a loaded sample and `position` at 0.1
@@ -154,6 +154,11 @@ The editor MUST show a `WaveformView` above the generic parameter editor, displa
 - Given a loaded sample, host transport stopped, and markers already cleared
 - When the timer ticks repeatedly with no parameter or peaks change
 - Then no repaint is requested and the static layers are not recomputed
+
+#### Scenario: Stopped plugin publishing empty frames does not repaint [Manual]
+- Given a loaded sample, the plugin Stopped and its dots already cleared, so every block publishes an empty snapshot
+- When the timer ticks repeatedly
+- Then no repaint is requested even though fresh empty frames keep arriving
 
 #### Scenario: Editor open during load [Manual]
 - Given the editor is open
@@ -229,7 +234,7 @@ Snapshots MUST be published from the audio thread to the message thread through 
 ### R-WD-7 Live lane-dot view
 The view MUST show a strip under the waveform (inside the same view, below the peaks area) with one dot slot per pool slot, laid out on a fixed number of rows (the strip height and slot-to-row mapping are design decisions, constant for a given view size). A dot MUST be drawn at the x of the mark's `position` (via `WaveformGeometry`) on the row of its `slot`, with alpha derived from its `level` (louder envelope is more opaque; level 0 is faint or invisible). The dots are a live-only layer: they MUST NOT alter or invalidate the cached static layers.
 
-A JUCE-free `GrainDisplayModel` in `grains_core` MUST decide fresh versus stale: it takes the poll results and counts poll ticks (not wall-clock time), holds the last frame while frames keep arriving, and MUST clear the markers once no fresh frame has arrived for the stale timeout (one named constant of 250 ms, counted in poll ticks as 8 consecutive polls without a fresh frame, about 267 ms effective at 30 Hz; the poll rate is a separate single named constant of 30 Hz). Frames arriving again MUST resume display immediately. The model MUST report a stale transition exactly once per fresh-to-stale change so the view can repaint once to clear. Markers MUST be shown only in the Waveform state (peaks available) and MUST NOT be shown in the "no waveform" or "drop a sample" states. When the host is stopped (no `processBlock` publishes), the markers MUST clear after the same 8 polls (about 267 ms). Grains shorter than one audio block can start and finish between two snapshots and are not guaranteed to be shown (documented limitation; the display samples at block rate, so what is shown is representative, not exhaustive).
+A JUCE-free `GrainDisplayModel` in `grains_core` MUST decide fresh versus stale: it takes the poll results and counts poll ticks (not wall-clock time), holds the last frame while frames keep arriving, and MUST clear the markers once no fresh frame has arrived for the stale timeout (one named constant of 250 ms, counted in poll ticks as 8 consecutive polls without a fresh frame, about 267 ms effective at 30 Hz; the poll rate is a separate single named constant of 30 Hz). Frames arriving again MUST resume display immediately. The model MUST report a stale transition exactly once per fresh-to-stale change so the view can repaint once to clear. Markers MUST be shown only in the Waveform state (peaks available) and MUST NOT be shown in the "no waveform" or "drop a sample" states. When the host is stopped (no `processBlock` publishes), the markers MUST clear after the same 8 polls (about 267 ms). Grains shorter than one audio block can start and finish between two snapshots and are not guaranteed to be shown (documented limitation; the display samples at block rate, so what is shown is representative, not exhaustive). When the plugin transport is Stopped (`transport-gate`), the processor publishes an empty snapshot (`count == 0`) every block once the grain pool has been reset (`plugin-shell` R-PS-4); the model MUST treat a fresh empty frame like any other fresh frame, so the markers clear at the first poll that receives it (and never later than the stale timeout), the model MUST report that fresh-with-marks to empty change as one repaint, and subsequent fresh empty frames MUST NOT report a repaint. The display MUST NOT require any new publish path, new polling rate, or Play/Stop knowledge.
 
 #### Scenario: Fresh frame displays [Automated]
 - Given a display model and a fresh frame with 5 marks
@@ -256,6 +261,11 @@ A JUCE-free `GrainDisplayModel` in `grains_core` MUST decide fresh versus stale:
 - When the poll rate and stale timeout are inspected
 - Then the poll rate is a single named constant equal to 30 Hz and the stale timeout a single named constant of 250 ms, counted as 8 polls
 
+#### Scenario: Empty fresh snapshot clears model with one repaint [Automated]
+- Given `GrainDisplayModel` showing marks, then a fresh empty snapshot (`count == 0`)
+- When the model is updated
+- Then the markers are cleared, one repaint is reported, and subsequent fresh empty snapshots report none
+
 #### Scenario: Dots appear under the waveform and follow the grains [Manual]
 - Given a loaded sample and audio running
 - When the user moves `position` and `positionJitter`
@@ -280,6 +290,21 @@ A JUCE-free `GrainDisplayModel` in `grains_core` MUST decide fresh versus stale:
 - Given several plugin instances open with their editors showing
 - When audio runs with the timer active
 - Then CPU use stays low and idle (hidden or stopped) views use no timer
+
+#### Scenario: Dots clear on Stop [Manual]
+- Given the plugin Playing with lane dots visible
+- When Stop is pressed and the fade-out completes
+- Then within one poll after the empty snapshot is polled, no dots are drawn (and no later than the stale timeout)
+
+#### Scenario: No dots while stopped after load [Manual]
+- Given a sample just loaded (default Stopped)
+- When the waveform view is shown
+- Then no grain dots are drawn until Play is pressed
+
+#### Scenario: Dots resume on Play [Manual]
+- Given the plugin Stopped with no dots
+- When Play is pressed
+- Then dots appear again as grains start and no new timer or publish path is involved
 
 ## Out of scope (explicit)
 Jitter dragging, new parameters, zoom/scroll, stacked stereo display, playhead, theming, WebView UI, extent bars, grain direction, audio or interaction real-time feedback (meters, scope), TSAN CI job (separate micro-PR).

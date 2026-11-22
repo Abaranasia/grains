@@ -108,13 +108,13 @@ Note: the design's testing strategy is unit layer only (Catch2 on `grains_core`)
 
 These cannot be automated in the unit layer. Carry them as pending items into verify and the archive report.
 
-- [ ] **M1. Buttons**: disabled before any load; enabled with Stop selected after a successful load; radio behaviour (exactly one selected, audio follows); failed load with no sample keeps both disabled; failed load or restore with a sample loaded keeps the old sample and enabled buttons, still Stopped. Refs: R-PS-6.
-- [ ] **M2. Audio**: silent after load until Play; Play fades in (about 20 ms, no click, peak at most 1); Stop fades to exact silence with idle-level CPU; a new sample load while Playing hard-stops with no fade and stays silent until Play. Refs: R-PS-4, R-TG-3, R-TG-10.
-- [ ] **M3. DAW `prepareToPlay` mid-session**: change sample rate or buffer size, or bypass and offline-render setup, while Playing. Plugin returns to Stopped, output is zeros, editor shows Stop selected within 100 ms, and sound resumes only after a new Play. Confirms the open question on host prepare. Refs: R-PS-4, R-TG-8.
-- [ ] **M4. Display dots clear when stopped**: with the lane-dot view visible, press Stop; dots clear after the fade-out and the empty snapshot are polled (and no later than the stale timeout); no dots after a load until Play; dots resume on Play. Refs: R-WD-7, R-PS-4.
-- [ ] **M5. State restore**: save a project while Playing, reload it. Plugin is Stopped after restore and the sample reloads; no Play/Stop state is in the saved state. Refs: R-PS-4, R-PS-7.
-- [ ] **M6. Play-click race**: press Play immediately after a load completes. Plugin MAY stay Stopped, and the buttons show Stop within 100 ms. Refs: R-PS-4 (accepted race).
-- [ ] **M7. Parameter sweep and rates**: sweep all 9 parameters while Stopped and while Playing; run at 44.1, 48 and 96 kHz. No crash or artifact. Refs: R-PS-4.
+- [x] **M1. Buttons**: disabled before any load; enabled with Stop selected after a successful load; radio behaviour (exactly one selected, audio follows); failed load with no sample keeps both disabled; failed load or restore with a sample loaded keeps the old sample and enabled buttons, still Stopped. Refs: R-PS-6. (passed by user, 2026-11-22)
+- [x] **M2. Audio**: silent after load until Play; Play fades in (about 20 ms, no click, peak at most 1); Stop fades to exact silence with idle-level CPU; a new sample load while Playing hard-stops with no fade and stays silent until Play. Refs: R-PS-4, R-TG-3, R-TG-10. (passed by user, 2026-11-22)
+- [x] **M3. DAW `prepareToPlay` mid-session**: change sample rate or buffer size, or bypass and offline-render setup, while Playing. Plugin returns to Stopped, output is zeros, editor shows Stop selected within 100 ms, and sound resumes only after a new Play. Confirms the open question on host prepare. Refs: R-PS-4, R-TG-8. (passed by user, 2026-11-22)
+- [x] **M4. Display dots clear when stopped**: with the lane-dot view visible, press Stop; dots clear after the fade-out and the empty snapshot are polled (and no later than the stale timeout); no dots after a load until Play; dots resume on Play. Refs: R-WD-7, R-PS-4. (passed by user, 2026-11-22)
+- [x] **M5. State restore**: save a project while Playing, reload it. Plugin is Stopped after restore and the sample reloads; no Play/Stop state is in the saved state. Refs: R-PS-4, R-PS-7. (passed by user, 2026-11-22)
+- [x] **M6. Play-click race**: press Play immediately after a load completes. Plugin MAY stay Stopped, and the buttons show Stop within 100 ms. Refs: R-PS-4 (accepted race). (passed by user, 2026-11-22)
+- [x] **M7. Parameter sweep and rates**: sweep all 9 parameters while Stopped and while Playing; run at 44.1, 48 and 96 kHz. No crash or artifact. Refs: R-PS-4. (passed by user, 2026-11-22)
 
 ## Phase 7. Docs and spec sync (archive time, not apply)
 
