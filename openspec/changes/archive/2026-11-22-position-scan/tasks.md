@@ -71,4 +71,10 @@ Note: budget is 800, not the default 400. Slice 1 alone has no user-visible effe
 ## Phase 7: Docs
 
 - [x] 7.1 Update README/parameter docs for `scan` (units, range, wrap, reset on Play/load), if present. N/A: the README has no parameter documentation.
-- [ ] 7.2 Fold spec deltas into `openspec/specs/**` at archive; confirm "Needs design confirmation" note in plugin-shell R-PS-7 is resolved by 5.4.
+- [x] 7.2 Fold spec deltas into `openspec/specs/**` at archive (done by sdd-archive). The "Needs design confirmation" note in plugin-shell R-PS-7 is NOT resolved: 5.4 is GREEN-only and 6.4 is pending; the note is kept open in the main spec.
+
+## Archive Status
+
+- Archive status: intentional-with-warnings (user decision; verify verdict PASS WITH WARNINGS, 0 CRITICAL).
+- Manual tasks 6.1-6.5 are INTENTIONALLY PENDING by user decision and remain unchecked. They are not verified.
+- Open follow-ups: legacy-state restore test (W2 / 5.4 GREEN-only, covered manually by 6.4); redundant `offset == 0.0` branch in spawn (S1); `scanOffset()` comment inaccuracy after rebase (readability suggestion, GranularEngine.h ~L97); `test_param_spec` toNormalised loop uses a constant (reliability suggestion); W4 engine-level finite-output assertion for extreme scan; live scan indicator on the waveform; tune skew 0.4 and the "len/s" label by ear; roadmap #8 playback modes.
