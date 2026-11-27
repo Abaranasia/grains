@@ -40,7 +40,7 @@ EngineParams busyParams()
 
 void setup(GranularEngine& e, const SampleBuffer& src, std::uint64_t seed)
 {
-    e.prepare(kSr, seed);
+    e.prepare(kSr, seed, grains::InitialTransport::Playing);
     e.setSource(&src);
     e.setParams(busyParams());
 }

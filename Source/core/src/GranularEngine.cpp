@@ -9,6 +9,26 @@ namespace grains {
 namespace {
 constexpr double kPi = 3.14159265358979323846;
 
+// Clamped to [0, 1]; NaN fails both comparisons and maps to 0.
+float clamp01(double v) noexcept
+{
+    return v > 0.0 ? (v < 1.0 ? static_cast<float>(v) : 1.0f) : 0.0f;
+}
+
+// Fractional part in [0, 1); a non-finite x gives 0. The subtraction can round up to exactly 1.
+double wrap01(double x) noexcept
+{
+    if (!std::isfinite(x)) return 0.0;
+    const double r = x - std::floor(x);
+    return r >= 1.0 ? 0.0 : r;
+}
+
+// Wraps around the source ends only when x lies outside [0, 1]; 1.0 itself (the last frame) stays.
+double foldOutside01(double x) noexcept
+{
+    return (x >= 0.0 && x <= 1.0) ? x : wrap01(x);
+}
+
 } // namespace
 
 float GranularEngine::softLimit(float y) noexcept
@@ -25,41 +45,79 @@ float GranularEngine::softLimit(float y) noexcept
     return y < 0.0f ? -m : m;
 }
 
-void GranularEngine::prepare(double sampleRate, std::uint64_t seed) noexcept
+void GranularEngine::prepare(double sampleRate, std::uint64_t seed, InitialTransport initial) noexcept
 {
     sampleRate_ = limits::sanitizeSampleRate(sampleRate);
+    seed_ = seed;
     rng_.seed(seed);
+    gate_.prepare(sampleRate_);
+    target_ = initial == InitialTransport::Playing;
+    if (target_) gate_.forcePlaying();
     pool_.reset();
     scheduler_.reset();
+    resetScan();
     scheduler_.configure(sampleRate_, params_.density, params_.timingJitter);
+}
+
+void GranularEngine::stopNow() noexcept
+{
+    gate_.forceStopped();
+    target_ = false;
+    pool_.reset();
+    scheduler_.reset();
+    resetScan();
 }
 
 void GranularEngine::setSource(const SampleBuffer* source) noexcept
 {
     source_ = source;
     pool_.reset(); // grain positions refer to the previous source
+    resetScan();   // a new load restarts the scan from the anchor
 }
 
 void GranularEngine::setParams(const EngineParams& params) noexcept
 {
-    params_ = params.clamped();
+    const EngineParams clamped = params.clamped();
+    if (clamped.scan != params_.scan) {
+        // Rebase on the old scan so the offset is continuous: only the time after the change is affected.
+        scanBase_ = wrap01(offsetAt(elapsed_));
+        scanFrom_ = elapsed_;
+    }
+    params_ = clamped;
     scheduler_.configure(sampleRate_, params_.density, params_.timingJitter);
 }
 
 void GranularEngine::process(float* left, float* right, int n) noexcept
 {
     if (n <= 0) return;
+    // The target is read once per call (block-quantised). Only Stopped -> Starting restarts: the
+    // state is then identical to prepare(), so every Play reproduces the same output.
+    if (gate_.request(target_)) {
+        rng_.seed(seed_);
+        pool_.reset();
+        scheduler_.reset();
+        resetScan();
+    }
     std::fill(left, left + n, 0.0f);
     std::fill(right, right + n, 0.0f);
     if (source_ == nullptr || source_->numFrames() <= 0 || source_->numChannels() <= 0) return;
+    if (gate_.stopped()) return; // no scheduling, no rng draws, no rendering
 
     int cursor = 0;
     scheduler_.advance(n, [&](int offset) {
         renderSegment(left, right, cursor, offset - cursor);
         cursor = offset;
-        spawn();
+        spawn(elapsed_ + offset);
     });
     renderSegment(left, right, cursor, n - cursor);
+    elapsed_ += n;
+
+    gate_.apply(left, right, n); // before the limiter, so |y| < 1 holds during ramps
+    if (gate_.stopped()) {       // the fade-out completed in this call: drop what is left
+        pool_.reset();
+        scheduler_.reset();
+        resetScan();
+    }
 
     for (int i = 0; i < n; ++i) {
         left[i] = softLimit(left[i]);
@@ -82,7 +140,41 @@ void GranularEngine::renderSegment(float* left, float* right, int offset, int co
     });
 }
 
-void GranularEngine::spawn() noexcept
+void GranularEngine::snapshotGrains(GrainSnapshot& out) const noexcept
+{
+    out.version = GrainSnapshot::kVersion;
+    out.count = 0;
+    if (source_ == nullptr) return; // setSource and prepare reset the pool, so it is empty here too
+
+    const int frames = source_->numFrames();
+    const double lastFrame = frames > 1 ? static_cast<double>(frames - 1) : 0.0;
+    pool_.forEachActiveSlot([&](int slot, const Grain& g) {
+        // spawn keeps pos <= frames - 1; the clamp only absorbs floating-point rounding.
+        // progress is the expression renderGrain feeds the window, so level is the next sample's window.
+        const float progress = g.length > 0 ? clamp01(static_cast<float>(g.age) / static_cast<float>(g.length)) : 0.0f;
+        GrainMark& m = out.marks[static_cast<std::size_t>(out.count++)];
+        m.position = lastFrame > 0.0 ? clamp01(g.pos / lastFrame) : 0.0f;
+        m.progress = progress;
+        m.level = clamp01(static_cast<double>(window_.at(progress)));
+        m.slot = static_cast<std::uint16_t>(slot);
+        m.reserved = 0;
+    });
+}
+
+void GranularEngine::resetScan() noexcept
+{
+    elapsed_ = 0;
+    scanFrom_ = 0;
+    scanBase_ = 0.0;
+}
+
+double GranularEngine::offsetAt(std::int64_t at) const noexcept
+{
+    if (params_.scan == 0.0f) return scanBase_;
+    return scanBase_ + static_cast<double>(params_.scan) * static_cast<double>(at - scanFrom_) / sampleRate_;
+}
+
+void GranularEngine::spawn(std::int64_t at) noexcept
 {
     // Fixed draw order and count, before any pool or bounds check, so skipped spawns consume the
     // same random stream as accepted ones (the schedule never depends on pool state).
@@ -93,7 +185,11 @@ void GranularEngine::spawn() noexcept
     const SampleBuffer& src = *source_;
     const int frames = src.numFrames();
 
-    const float posNorm = limits::sanitizeUnit(params_.position + params_.positionJitter * posDraw, 0.5f);
+    const double offset = offsetAt(at);
+    // Fold before the jitter clamp. At offset 0 the anchor is used untouched (scan 0 is bit-identical).
+    const float anchor = offset == 0.0 ? params_.position
+                                       : static_cast<float>(foldOutside01(static_cast<double>(params_.position) + offset));
+    const float posNorm = limits::sanitizeUnit(anchor + params_.positionJitter * posDraw, 0.5f);
     double start = static_cast<double>(posNorm) * static_cast<double>(frames - 1);
 
     const float semis = limits::detail::clampTo(params_.pitchSemitones + params_.pitchJitterSemitones * pitchDraw,

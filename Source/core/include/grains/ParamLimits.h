@@ -19,6 +19,9 @@ constexpr float kPitchJitterSemitonesMax = 12.0f;
 constexpr float kGainMax = 2.0f;
 constexpr float kGainDefault = 1.0f;
 
+// Position scan speed in source lengths per second, symmetric: [-kScanMax, +kScanMax], 0 = static.
+constexpr float kScanMax = 1.0f;
+
 constexpr double kSampleRateMin = 8000.0;
 constexpr double kSampleRateMax = 384000.0;
 constexpr double kSampleRateDefault = 48000.0;
@@ -68,6 +71,13 @@ inline float sanitizeGain(float v) noexcept
 {
     if (std::isnan(v)) return kGainDefault;
     return detail::clampTo(v, 0.0f, kGainMax);
+}
+
+// Scan speed. NaN -> 0 (static), +-inf and out-of-range values clamp to +-kScanMax.
+inline float sanitizeScan(float v) noexcept
+{
+    if (std::isnan(v)) return 0.0f;
+    return detail::clampTo(v, -kScanMax, kScanMax);
 }
 
 inline double sanitizeSampleRate(double v) noexcept

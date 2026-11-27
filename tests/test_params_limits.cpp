@@ -71,3 +71,15 @@ TEST_CASE("params_limits: sample rate clamps to 8 kHz - 384 kHz", "[params_limit
     CHECK(sanitizeSampleRate(1.0e7) == 384000.0);
     CHECK(sanitizeSampleRate(std::numeric_limits<double>::quiet_NaN()) == 48000.0);
 }
+
+TEST_CASE("params_limits: scan is symmetric, +-1, NaN gives 0", "[params_limits][scan]")
+{
+    CHECK(kScanMax == 1.0f);
+    CHECK(sanitizeScan(0.3f) == 0.3f);
+    CHECK(sanitizeScan(-0.3f) == -0.3f);
+    CHECK(sanitizeScan(7.0f) == 1.0f);
+    CHECK(sanitizeScan(-7.0f) == -1.0f);
+    CHECK(sanitizeScan(kInf) == 1.0f);
+    CHECK(sanitizeScan(-kInf) == -1.0f);
+    CHECK(sanitizeScan(kNaN) == 0.0f);
+}

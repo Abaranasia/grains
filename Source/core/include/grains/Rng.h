@@ -38,6 +38,9 @@ public:
     // Uniform in [-1, 1).
     float bipolar() noexcept { return uniform01() * 2.0f - 1.0f; }
 
+    // Read-only introspection (tests): lets a test prove that no draw happened.
+    uint64_t state() const noexcept { return state_; }
+
 private:
     static constexpr uint64_t kStream = 54u;
     uint64_t state_ = 0;

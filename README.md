@@ -28,7 +28,8 @@ it through the fetch path below. Use a separate build directory:
 - `GRAINS_SANITIZE=ON` together with the plugin is unsupported.
 - The plugin granulates a loaded sample: use the Load button or drop a `.wav`/`.aiff`/`.aif` file
   on the editor. With no sample it outputs silence. Files longer than 5 minutes are truncated.
-- The engine plays continuously once a sample loads (no MIDI gating) and soft-limits its output
+- After a sample loads the plugin starts Stopped; the Play and Stop buttons start and stop the
+  engine (no MIDI gating, and the Play/Stop state is not saved in sessions). It soft-limits its output
   to a fixed 0 dBFS ceiling (never above 0 dBFS; quiet passages are untouched), so heavy overlap
   saturates smoothly instead of clipping.
 - Sessions store the sample's absolute path, not the audio. If the file moves, the plugin stays

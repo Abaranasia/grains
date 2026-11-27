@@ -145,7 +145,7 @@ grains::EngineParams steadyParams()
 grains_test::Out renderSource(const grains::SampleBuffer& src, int frames)
 {
     grains::GranularEngine e;
-    e.prepare(kEngineRate, 4242);
+    e.prepare(kEngineRate, 4242, grains::InitialTransport::Playing);
     e.setSource(&src);
     e.setParams(steadyParams());
     return grains_test::render(e, frames, 512);

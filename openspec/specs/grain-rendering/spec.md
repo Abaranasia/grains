@@ -33,9 +33,9 @@ A grain MUST read source samples at a constant playback rate r = 2^(semitones/12
 - Then the grain reads source indices 2n (n = 0..255) within 1e-5
 
 #### Scenario: Pitch is playback rate only
-- Given position fixed, pitch changed
+- Given position fixed and `scan` = 0, pitch changed
 - When rendering
-- Then the start position is unchanged and only the consumed span changes (no scan speed control exists in this change)
+- Then the start position is unchanged and only the consumed span changes (pitch never moves the start position; start position motion over time comes only from `scan`, R-GR-12)
 
 ### R-GR-3 Boundary-safe reads
 A grain MUST NOT read outside the source and MUST NOT be terminated mid-window. If its span would exceed the available source, the grain length (in output samples) MUST be SHRUNK at spawn so the whole windowed grain fits (user decision D1; the start position is not moved to preserve full length); the window MUST complete over the shrunk length so no truncation click occurs. Only if the shrunk length would be below the 2-sample minimum MAY the start be moved back to fit 2 samples, otherwise the spawn is skipped. For a source shorter than a minimum useful span, the grain MUST still be well defined (length >= 2 samples or skipped) without out-of-bounds access.
@@ -87,7 +87,7 @@ Engine output MUST be normalized so that a dense cloud has approximately the sam
 - Then no output sample-to-sample step exceeds the documented bound
 
 ### R-GR-6 Determinism
-With identical source, parameters, seed, sample rate, and block partition, the engine MUST produce bit-identical output across runs. Output MUST also be bit-identical across different block partitions of the same total length (block-split invariance), except where parameter changes are applied per block.
+With identical source, parameters, seed, sample rate, and block partition, the engine MUST produce bit-identical output across runs. Output MUST also be bit-identical across different block partitions of the same total length (block-split invariance), except where parameter changes are applied per block. This MUST hold for any constant `scan` value, including non-zero values (R-GR-12).
 
 #### Scenario: Same seed bit-identical
 - Given two engine instances, same seed and parameters
@@ -98,6 +98,11 @@ With identical source, parameters, seed, sample rate, and block partition, the e
 - Given constant parameters and the same seed
 - When 1 s is rendered as 512-sample blocks, 37-sample blocks, and one block
 - Then outputs are bit-identical (or, if the design cannot guarantee that, within 1e-6 absolute)
+
+#### Scenario: Block-split invariance with non-zero scan [Catch2]
+- Given constant parameters with `scan` = 0.37 and the same seed
+- When 1 s is rendered as 512-sample blocks, 37-sample blocks, and one block
+- Then outputs are bit-identical (or within 1e-6 absolute)
 
 ### R-GR-7 Numeric safety and extremes
 For every valid or out-of-range parameter combination, output samples MUST be finite (no NaN, no Inf) and bounded by the documented ceiling C = 1.0: |y| < 1.0 strictly, enforced by the soft output limiter (R-GR-10). Parameters MUST be clamped to documented ranges, NaN inputs treated as defaults. Ranges (amended, user decision D2): density [0, 1000] gr/s (0 = no spawns), size [1 ms, 1000 ms] with a minimum grain length of 2 output samples, pitch [-24, +24] st, position [0, 1] of source length, position jitter [0, 1], pitch jitter [0, 12] st, pan spread [0, 1], gain [0, 2] linear. Denormals MUST NOT be produced in output when grains decay or the source is silent. Grain length in output samples MUST be derived from the engine sample rate only, and MUST NOT depend on the source's own sample rate. The per-grain read-rate compensation `srcSr / sampleRate_` MUST be kept for sources whose rate differs from the engine rate (for example while a reload is in flight), and MUST equal 1 (no change to read rate) when the source rate equals the engine rate. Numeric-safety checks MUST hold on both supported toolchains (MSVC and clang), including under UndefinedBehaviorSanitizer with float-cast-overflow checking enabled for the core and tests.
@@ -229,3 +234,74 @@ The limiter MUST NOT allocate, lock, throw, or block, and MUST NOT introduce lat
 - Given the Standalone with a loaded sample and parameters set so that grains overlap heavily
 - When the output is monitored by ear and on a meter
 - Then the output never exceeds 0 dBFS, loud passages saturate smoothly rather than hard-clip, and quiet passages are unchanged in level
+
+### R-GR-11 Read-only grain introspection
+Reading the active grains for display (`GranularEngine::snapshotGrains(GrainSnapshot&) const noexcept`) MUST be a pure observation: it MUST NOT change the rendered output, MUST NOT consume or advance any RNG draw, MUST NOT modify pool state (slot assignment, free list, grain phase, active count), and MUST NOT allocate, lock, throw, or block. It MUST iterate the pool as const, with at most pool-capacity iterations. Calling it any number of times between blocks, or not at all, MUST yield bit-identical audio for the same source, parameters, seed, sample rate, and block partition (R-GR-6 is preserved).
+
+#### Scenario: Bit-identical render with and without snapshot [Catch2]
+- Given two engines with the same source, parameters, seed, sample rate, and block partition
+- When engine A renders 2 s taking a snapshot after every block (and extra snapshots between blocks) and engine B renders the same 2 s with no snapshot calls
+- Then the two outputs are bit-identical on both channels
+
+#### Scenario: Snapshot does not alter pool or RNG [Catch2]
+- Given an engine rendering with active grains
+- When snapshots are taken repeatedly without rendering
+- Then `activeGrainCount()` is unchanged and the next rendered block equals the block rendered by an identical engine that was never snapshotted
+
+#### Scenario: Snapshot is allocation-free [Catch2]
+- Given the test binary that counts global operator new/delete calls
+- When the counter is reset after preparation and snapshots are taken while the pool is saturated and at extreme parameters
+- Then the allocation count is 0
+
+#### Scenario: Snapshot compiles as const noexcept [Catch2]
+- Given a `const GranularEngine`
+- When `snapshotGrains` is called on it
+- Then it compiles and the call is `noexcept`
+
+### R-GR-12 Position scan
+`EngineParams` MUST carry a signed `scan` field in sample lengths per second (1.0 = the full source length per second of output), valid range [-1, +1], default 0. `scan` MUST be clamped to [-1, +1] and NaN MUST be treated as 0 (consistent with R-GR-7). The engine MUST maintain a scan offset, in fractions of the source length, equal to `base + scan * elapsedSamples / sampleRate`, where `elapsedSamples` is an integer sample counter of rendered output samples since the last rebase and `base` is the offset at the last rebase. The engine MUST rebase (base := current offset, counter := 0) whenever the applied `scan` value changes, so a changed `scan` affects only the time after the change and the offset is continuous. The offset MUST be evaluated at each grain's spawn sample (inside scheduler segments, not once per block). A spawned grain's start position MUST be `clamp01(fold(position + offset) + positionJitter * draw)`, where `fold` wraps the sum around the source ends (period 1.0 of the source length) and is applied BEFORE the jitter clamp; the jitter draw and its rng consumption MUST be unchanged. When the offset is exactly 0, `fold` MUST NOT alter the anchor (so `position` = 1.0 behaves as today). The offset MUST hold its value when `scan` returns to 0 (it is not pulled back to the anchor). The offset MUST NOT use per-block floating-point accumulation, and MUST be independent of block size and, for a given elapsed time in seconds, of sample rate.
+
+#### Scenario: Zero scan is identical to today [Catch2]
+- GIVEN a fixed source, seed and parameters with `scan` = 0 (including `position` = 1.0 and `positionJitter` > 0)
+- WHEN 1 s is rendered
+- THEN the output is bit-identical to the output of the engine before this change
+
+#### Scenario: Offset advances at the stated rate [Catch2]
+- GIVEN a ramp source of N samples, `scan` = +0.5, jitter 0, anchor 0, rate 48 kHz
+- WHEN grains spawn at known sample indices
+- THEN a grain spawned at output sample t starts at source index (0.5 * t / 48000) * (N - 1) within one source sample
+
+#### Scenario: Negative scan moves backwards [Catch2]
+- GIVEN `scan` = -0.25 and anchor 0.5, jitter 0
+- WHEN a grain spawns 1 s after reset
+- THEN its start position equals fold(0.5 - 0.25) = 0.25 of the source
+
+#### Scenario: Wrap at both ends [Catch2]
+- GIVEN `scan` = +1 and anchor 0.75, then `scan` = -1 and anchor 0.25
+- WHEN a grain spawns 0.5 s after reset in each case
+- THEN the start positions are fold(1.25) = 0.25 and fold(-0.25) = 0.75 (wrapped, not clamped to an end)
+
+#### Scenario: Wrap precedes jitter clamp [Catch2]
+- GIVEN an offset-bearing sum that wraps to near 0 and `positionJitter` > 0
+- WHEN grains spawn
+- THEN every start position is `clamp01(wrapped + jitter)`, so jitter never causes a wrap and positions stay within [0, 1]
+
+#### Scenario: Scan change is continuous [Catch2]
+- GIVEN `scan` = 0.5 for 1 s, then `scan` = -0.5
+- WHEN grains spawn at 1 s and 1.5 s
+- THEN the second start position is 0.25 of a source length behind the first (offset continuous, no jump)
+
+#### Scenario: Offset holds when scan returns to 0 [Catch2]
+- GIVEN `scan` = 0.5 for 1 s, then `scan` = 0
+- WHEN grains spawn afterwards without Play or load
+- THEN their start position stays at fold(anchor + 0.5)
+
+#### Scenario: Scan is clamped and NaN-safe [Catch2]
+- GIVEN `scan` in {-5, +5, NaN, +/-infinity}
+- WHEN applied and rendered
+- THEN the effective scan is -1, +1, 0, and -1/+1 respectively and all output is finite with |y| < 1.0
+
+#### Scenario: Block-split and sample-rate independence [Catch2]
+- GIVEN constant non-zero `scan` and the same seed
+- WHEN 1 s is rendered as 512-sample blocks, 37-sample blocks and one block, and at 44.1 kHz versus 48 kHz for equal elapsed seconds
+- THEN the block splits are bit-identical and the start positions at equal elapsed seconds agree within one sample of difference at the lower rate

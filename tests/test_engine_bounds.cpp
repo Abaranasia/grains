@@ -29,7 +29,7 @@ TEST_CASE("engine_bounds: near-end grain shrinks and its window completes", "[en
     const SampleBuffer src(std::vector<float>(static_cast<std::size_t>(frames), 1.0f), {}, 48000.0);
     for (float position : {0.999f, 0.9f}) {
         GranularEngine e;
-        e.prepare(48000.0, 1);
+        e.prepare(48000.0, 1, grains::InitialTransport::Playing);
         e.setSource(&src);
         EngineParams p;
         p.density = 0.1f;
@@ -79,7 +79,7 @@ TEST_CASE("engine_bounds: move-back fallback renders a 2-sample grain inside the
     };
     for (const Case c : {Case{0.0f, 1}, Case{12.0f, 2}}) {
         GranularEngine e;
-        e.prepare(48000.0, 1);
+        e.prepare(48000.0, 1, grains::InitialTransport::Playing);
         e.setSource(&src);
         EngineParams p;
         p.density = 0.1f;
@@ -119,7 +119,7 @@ TEST_CASE("engine_bounds: tiny sources are silent or sound exactly where the fal
         INFO("frames=" << c.frames << " semitones=" << c.semitones);
         const SampleBuffer src(std::vector<float>(static_cast<std::size_t>(c.frames), 0.8f), {}, 48000.0);
         GranularEngine e;
-        e.prepare(48000.0, 5);
+        e.prepare(48000.0, 5, grains::InitialTransport::Playing);
         e.setSource(&src);
         EngineParams p;
         p.density = 1000.0f;
@@ -157,7 +157,7 @@ TEST_CASE("engine_bounds: grain length follows size and engine sample rate", "[e
         INFO("engineRate=" << c.engineRate << " sourceRate=" << c.sourceRate);
         const SampleBuffer src(std::vector<float>(20000, 1.0f), {}, c.sourceRate);
         GranularEngine e;
-        e.prepare(c.engineRate, 1);
+        e.prepare(c.engineRate, 1, grains::InitialTransport::Playing);
         e.setSource(&src);
         EngineParams p;
         p.density = 0.1f; // one grain at sample 0
@@ -177,7 +177,7 @@ TEST_CASE("engine_bounds: density 0 and missing source give exact silence", "[en
 {
     const SampleBuffer src(std::vector<float>(5000, 1.0f), {}, 48000.0);
     GranularEngine e;
-    e.prepare(48000.0, 3);
+    e.prepare(48000.0, 3, grains::InitialTransport::Playing);
     e.setSource(&src);
     EngineParams p;
     p.density = 0.0f;
@@ -185,7 +185,7 @@ TEST_CASE("engine_bounds: density 0 and missing source give exact silence", "[en
     CHECK(allZero(render(e, 2000, 100)));
 
     GranularEngine e2;
-    e2.prepare(48000.0, 3);
+    e2.prepare(48000.0, 3, grains::InitialTransport::Playing);
     e2.setParams(EngineParams{}); // no source set
     CHECK(allZero(render(e2, 2000, 100)));
 
@@ -208,8 +208,8 @@ TEST_CASE("engine_bounds: mono equals dual-mono bit for bit", "[engine_bounds]")
     p.panSpread = 1.0f;
 
     GranularEngine a, b;
-    a.prepare(48000.0, 42);
-    b.prepare(48000.0, 42);
+    a.prepare(48000.0, 42, grains::InitialTransport::Playing);
+    b.prepare(48000.0, 42, grains::InitialTransport::Playing);
     a.setSource(&mono);
     b.setSource(&dual);
     a.setParams(p);
@@ -230,7 +230,7 @@ TEST_CASE("engine_bounds: pan spread 0 centres a mono source, spread 1 does not"
     p.positionJitter = 0.3f;
 
     GranularEngine e;
-    e.prepare(48000.0, 9);
+    e.prepare(48000.0, 9, grains::InitialTransport::Playing);
     e.setSource(&src);
     p.panSpread = 0.0f;
     e.setParams(p);
@@ -239,7 +239,7 @@ TEST_CASE("engine_bounds: pan spread 0 centres a mono source, spread 1 does not"
     CHECK(centred.L == centred.R);
 
     GranularEngine e2;
-    e2.prepare(48000.0, 9);
+    e2.prepare(48000.0, 9, grains::InitialTransport::Playing);
     e2.setSource(&src);
     p.panSpread = 1.0f;
     e2.setParams(p);
@@ -252,7 +252,7 @@ TEST_CASE("engine_bounds: output ceiling and denormal flush", "[engine_bounds]")
     // Loud source at maximum gain/density/size saturates softly: strictly inside the ceiling.
     const SampleBuffer loud(std::vector<float>(8000, 1.0f), {}, 48000.0);
     GranularEngine e;
-    e.prepare(48000.0, 2);
+    e.prepare(48000.0, 2, grains::InitialTransport::Playing);
     e.setSource(&loud);
     EngineParams p;
     p.density = 1000.0f;
@@ -268,7 +268,7 @@ TEST_CASE("engine_bounds: output ceiling and denormal flush", "[engine_bounds]")
     // A source far below the flush threshold produces exact zeros, never denormals.
     const SampleBuffer tiny(std::vector<float>(4000, 1e-30f), {}, 48000.0);
     GranularEngine e2;
-    e2.prepare(48000.0, 2);
+    e2.prepare(48000.0, 2, grains::InitialTransport::Playing);
     e2.setSource(&tiny);
     e2.setParams(EngineParams{});
     CHECK(allZero(render(e2, 24000, 480)));

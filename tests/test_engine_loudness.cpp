@@ -29,7 +29,7 @@ constexpr double kSr = 48000.0;
 double steadyRms(const SampleBuffer& src, float density, std::uint64_t seed)
 {
     GranularEngine e;
-    e.prepare(kSr, seed);
+    e.prepare(kSr, seed, grains::InitialTransport::Playing);
     e.setSource(&src);
     EngineParams p;
     p.density = density;
@@ -77,7 +77,7 @@ TEST_CASE("engine_loudness: a density sweep produces no step above the window sl
 
     for (bool upward : {true, false}) {
         GranularEngine e;
-        e.prepare(kSr, 8);
+        e.prepare(kSr, 8, grains::InitialTransport::Playing);
         e.setSource(&dc);
         EngineParams p;
         p.grainSizeMs = 50.0f;

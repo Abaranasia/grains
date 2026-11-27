@@ -37,6 +37,24 @@ juce::String prop(const juce::ValueTree& tree, const juce::Identifier& id)
 {
     return tree.getProperty(id).toString();
 }
+
+// APVTS::replaceState gives a parameter that has no child in the incoming tree the current live value,
+// not its default. State saved before a parameter existed (for example `scan`) would then keep whatever
+// the running instance held. Add an explicit default entry for every table id the state lacks.
+void addMissingParamDefaults(juce::ValueTree& state)
+{
+    const juce::Identifier paramType{"PARAM"};
+    const juce::Identifier idProp{"id"};
+    const juce::Identifier valueProp{"value"};
+    for (const auto& s : pm::kSpecs) {
+        const juce::String id{s.id};
+        if (state.getChildWithProperty(idProp, id).isValid()) continue;
+        juce::ValueTree child{paramType};
+        child.setProperty(idProp, id, nullptr);
+        child.setProperty(valueProp, s.def, nullptr);
+        state.appendChild(child, nullptr);
+    }
+}
 } // namespace
 
 GrainsAudioProcessor::GrainsAudioProcessor()
@@ -53,8 +71,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainsAudioProcessor::create
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
     for (const auto& s : pm::kSpecs) {
         layout.add(std::make_unique<juce::AudioParameterFloat>(
-            juce::ParameterID{s.id, 1}, s.name,
-            juce::NormalisableRange<float>(s.min, s.max, 0.0f, s.skew), s.def,
+            juce::ParameterID{s.id, s.versionHint}, s.name,
+            juce::NormalisableRange<float>(s.min, s.max, 0.0f, s.skew, s.symmetric), s.def,
             juce::AudioParameterFloatAttributes().withLabel(s.unit)));
     }
     return layout;
@@ -62,10 +80,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout GrainsAudioProcessor::create
 
 void GrainsAudioProcessor::prepareToPlay(double sampleRate, int maxBlockSize)
 {
-    engine_.prepare(sampleRate, kSeed);
+    engine_.prepare(sampleRate, kSeed); // Stopped: a host prepare returns the plugin to Stopped
+    playing_.store(false, std::memory_order_relaxed);
     loader_.retarget(sampleRate); // reissues or reloads off this thread; a no-op when the rate is unchanged
     scratchSize_ = std::max(1, maxBlockSize);
     scratch_.allocate(static_cast<size_t>(scratchSize_), true);
+    publishGrains(); // the pool is empty after prepare: clears any markers the editor still shows
 }
 
 bool GrainsAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
@@ -79,7 +99,12 @@ void GrainsAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 {
     juce::ScopedNoDenormals noDenormals;
     // Adopt a newly published source first so a swap is never stuck behind an early return.
-    if (const auto r = exchange_.acquire(); r.changed) engine_.setSource(r.source);
+    if (const auto r = exchange_.acquire(); r.changed) {
+        engine_.setSource(r.source);
+        engine_.stopNow(); // a new sample hard-stops with no fade and stays silent until Play
+        playing_.store(false, std::memory_order_relaxed);
+    }
+    engine_.setPlaying(playing_.load(std::memory_order_relaxed));
     midi.clear(); // MIDI is accepted and ignored in this version
 
     std::array<float, pm::kCount> plain{};
@@ -96,19 +121,18 @@ void GrainsAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 
     if (stereo) {
         engine_.process(left, right, numSamples);
-        return;
-    }
-    // Mono host: render into the preallocated scratch right channel and discard it.
-    // Unprepared (no scratch yet): output silence instead of looping forever.
-    if (scratchSize_ <= 0 || scratch_ == nullptr) {
+    } else if (scratchSize_ <= 0 || scratch_ == nullptr) {
+        // Mono host, unprepared (no scratch yet): output silence instead of looping forever.
         buffer.clear();
-        return;
+    } else {
+        // Mono host: render into the preallocated scratch right channel and discard it.
+        for (int done = 0; done < numSamples;) {
+            const int n = std::min(scratchSize_, numSamples - done);
+            engine_.process(left + done, scratch_.get(), n);
+            done += n;
+        }
     }
-    for (int done = 0; done < numSamples;) {
-        const int n = std::min(scratchSize_, numSamples - done);
-        engine_.process(left + done, scratch_.get(), n);
-        done += n;
-    }
+    publishGrains(); // one snapshot per block, after the render
 }
 
 juce::AudioProcessorEditor* GrainsAudioProcessor::createEditor()
@@ -128,7 +152,10 @@ void GrainsAudioProcessor::setStateInformation(const void* data, int sizeInBytes
     if (const auto xml = getXmlFromBinary(data, sizeInBytes))
         if (xml->hasTagName(apvts_.state.getType()))
         {
-            apvts_.replaceState(juce::ValueTree::fromXml(*xml));
+            auto incoming = juce::ValueTree::fromXml(*xml);
+            addMissingParamDefaults(incoming);
+            apvts_.replaceState(incoming);
+            playing_.store(false, std::memory_order_relaxed); // restore always starts Stopped
             const auto ref = grains::SamplePathResolver::restoreRef(
                 prop(apvts_.state, kSamplePath).toStdString(), prop(apvts_.state, kSampleName).toStdString(),
                 prop(apvts_.state, kSampleAnchor).toStdString(), prop(apvts_.state, kSampleRel).toStdString());
@@ -170,6 +197,7 @@ void GrainsAudioProcessor::onLoadResult(const SampleLoader::Result& r)
     }
     // Results are posted in commit order, so applying every one here (before the label filter below)
     // keeps the waveform in step with the source that is actually audible.
+    if (r.loaded || r.cleared) playing_.store(false, std::memory_order_relaxed); // a failed load keeps the state
     const bool waveformChanged = waveform_.apply(r.loaded, r.cleared, r.peaks);
     if (r.generation < loader_.latestGeneration()) { // superseded: only the label is filtered
         if (waveformChanged) broadcaster_.sendChangeMessage();

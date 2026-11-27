@@ -3,9 +3,11 @@
 
 #include <grains/EngineParams.h>
 #include <grains/GrainPool.h>
+#include <grains/GrainSnapshot.h>
 #include <grains/GranularEngine.h>
 #include <grains/SampleBuffer.h>
 #include <grains/SourceExchange.h>
+#include <grains/TripleBuffer.h>
 
 #include "support/AllocationCounter.h"
 #include "support/EngineHelpers.h"
@@ -14,6 +16,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -134,7 +137,7 @@ TEST_CASE("realtime: process() performs zero allocations with normal settings", 
 {
     const SampleBuffer src(grains_test::noise(96000, 5), grains_test::noise(96000, 6), kSr);
     GranularEngine e;
-    e.prepare(kSr, 1);
+    e.prepare(kSr, 1, grains::InitialTransport::Playing);
     e.setSource(&src);
     EngineParams p;
     p.density = 40.0f;
@@ -151,7 +154,7 @@ TEST_CASE("realtime: process() performs zero allocations with a full pool", "[re
 {
     const SampleBuffer src(grains_test::noise(200000, 7), grains_test::noise(200000, 8), kSr);
     GranularEngine e;
-    e.prepare(kSr, 2);
+    e.prepare(kSr, 2, grains::InitialTransport::Playing);
     e.setSource(&src);
     EngineParams p;
     p.density = 1000.0f;
@@ -173,7 +176,7 @@ TEST_CASE("realtime: process() performs zero allocations while the limiter is en
 {
     const SampleBuffer dc(std::vector<float>(200000, 1.0f), {}, kSr);
     GranularEngine e;
-    e.prepare(kSr, 1);
+    e.prepare(kSr, 1, grains::InitialTransport::Playing);
     e.setSource(&dc);
     EngineParams p;
     p.density = 200.0f;
@@ -204,7 +207,7 @@ TEST_CASE("realtime: process() performs zero allocations at parameter extremes",
                 for (float jitter : jitters)
                     for (float position : positions) {
                         GranularEngine e;
-                        e.prepare(kSr, 3);
+                        e.prepare(kSr, 3, grains::InitialTransport::Playing);
                         e.setSource(&src);
                         EngineParams p;
                         p.grainSizeMs = size;
@@ -238,7 +241,7 @@ TEST_CASE("realtime: a saturating density fills the pool without allocating", "[
     for (float pitch : {-24.0f, 24.0f}) {
         INFO("pitch=" << pitch);
         GranularEngine e;
-        e.prepare(kSr, 3);
+        e.prepare(kSr, 3, grains::InitialTransport::Playing);
         e.setSource(&src);
         EngineParams p;
         p.grainSizeMs = 1000.0f;
@@ -259,7 +262,7 @@ TEST_CASE("realtime: process() performs zero allocations for any block size", "[
     for (int block : {1, 37, 512, 4096}) {
         INFO("block=" << block);
         GranularEngine e;
-        e.prepare(kSr, 4);
+        e.prepare(kSr, 4, grains::InitialTransport::Playing);
         e.setSource(&src);
         EngineParams p;
         p.density = 500.0f;
@@ -283,7 +286,7 @@ void checkSwapIsRealtimeSafe(bool clear)
 {
     grains::SourceExchange<SampleBuffer> x;
     GranularEngine e;
-    e.prepare(kSr, 1);
+    e.prepare(kSr, 1, grains::InitialTransport::Playing);
     EngineParams p;
     p.density = 40.0f;
     p.grainSizeMs = 80.0f;
@@ -349,4 +352,151 @@ TEST_CASE("realtime: committing a staged source and acquiring it allocates and f
     CHECK(static_cast<bool>(displaced));
     displaced = grains::SourceExchange<SampleBuffer>::Staged{};
     x.collect();
+}
+
+// R-GR-11, R-PS-5, R-WD-6: the audio thread's whole display hook (snapshot into the mailbox's back
+// slot, publish) and the consumer's poll (update, front) allocate nothing, with a light and a
+// saturated pool. The mailbox is plain member storage, so it exists before the scope.
+TEST_CASE("realtime: snapshotting and publishing grains allocates nothing", "[realtime][grain_snapshot]")
+{
+    const SampleBuffer src(grains_test::noise(200000, 13), grains_test::noise(200000, 14), kSr);
+    for (float density : {40.0f, 1000.0f}) {
+        INFO("density=" << density);
+        GranularEngine e;
+        e.prepare(kSr, 6, grains::InitialTransport::Playing);
+        e.setSource(&src);
+        EngineParams p;
+        p.density = density;
+        p.grainSizeMs = 1000.0f;
+        p.position = 0.1f;
+        e.setParams(p);
+        grains::TripleBuffer<grains::GrainSnapshot> mailbox;
+        std::vector<float> l(512), r(512);
+        for (int i = 0; i < 40; ++i) e.process(l.data(), r.data(), 512); // warm up outside the scope
+        std::size_t allocs = 99;
+        int fresh = 0, mismatches = 0, maxCount = 0;
+        {
+            AllocationScope scope;
+            for (int i = 0; i < 100; ++i) {
+                e.process(l.data(), r.data(), 512);
+                e.snapshotGrains(mailbox.back());
+                mailbox.publish();
+                if (mailbox.update()) {
+                    ++fresh;
+                    if (mailbox.front().count != e.activeGrainCount()) ++mismatches;
+                    maxCount = std::max(maxCount, static_cast<int>(mailbox.front().count));
+                }
+            }
+            allocs = scope.count();
+        }
+        CHECK(allocs == 0);
+        CHECK(fresh == 100);
+        CHECK(mismatches == 0);
+        CHECK(maxCount > 0);
+        if (density == 1000.0f) CHECK(maxCount == grains::GrainPool::kCapacity);
+    }
+}
+
+// R-TG-9: Play and Stop requests, restarts, fades (also reversed mid-fade), stopNow and idle
+// stopped blocks never allocate. Sound is asserted so the toggles really exercised the render.
+TEST_CASE("realtime: process() performs zero allocations across Play, Stop and stopNow toggles", "[realtime][transport]")
+{
+    const SampleBuffer src(grains_test::noise(96000, 5), grains_test::noise(96000, 6), kSr);
+    GranularEngine e;
+    e.prepare(kSr, 1); // Stopped
+    e.setSource(&src);
+    EngineParams p;
+    p.density = 80.0f;
+    p.grainSizeMs = 60.0f;
+    p.positionJitter = 0.2f;
+    p.timingJitter = 0.3f;
+    e.setParams(p);
+    constexpr int kBlock = 256;
+    std::vector<float> l(kBlock), r(kBlock);
+    float* const pl = l.data();
+    float* const pr = r.data();
+    float peak = 0.0f;
+    std::size_t allocs = 0;
+    {
+        AllocationScope scope;
+        auto run = [&](int blocks) {
+            for (int i = 0; i < blocks; ++i) {
+                e.process(pl, pr, kBlock);
+                for (int k = 0; k < kBlock; ++k) peak = std::max({peak, std::abs(pl[k]), std::abs(pr[k])});
+            }
+        };
+        run(4); // stopped
+        e.setPlaying(true);
+        run(2); // mid fade-in (ramp is 960 samples)
+        e.setPlaying(false); // reverses the fade-in
+        run(1);
+        e.setPlaying(true); // latched during Stopping
+        run(12);            // fade-out completes, then the restart fades in and plays
+        e.setPlaying(true); // redundant
+        run(8);
+        e.setPlaying(false);
+        run(10); // fade-out and idle stopped blocks
+        e.setPlaying(true);
+        run(6);
+        e.stopNow();
+        run(3);
+        allocs = scope.count();
+    }
+    CHECK(allocs == 0);
+    CHECK(peak > kSoundThreshold);
+}
+
+// R-GR-12: the scan offset is plain integer and double arithmetic. A non-zero scan, scan changes
+// (rebase in setParams, as the plugin applies them every block), wraps at both ends and the resets
+// on Play, stopNow and setSource allocate nothing. Sound is asserted so the render really ran.
+TEST_CASE("realtime: process() performs zero allocations while scanning", "[realtime][scan]")
+{
+    const SampleBuffer src(grains_test::noise(96000, 5), grains_test::noise(96000, 6), kSr);
+    const SampleBuffer other(grains_test::noise(96000, 15), grains_test::noise(96000, 16), kSr);
+    GranularEngine e;
+    e.prepare(kSr, 1); // Stopped
+    e.setSource(&src);
+    EngineParams p;
+    p.density = 80.0f;
+    p.grainSizeMs = 60.0f;
+    p.position = 0.9f;
+    p.positionJitter = 0.3f;
+    p.timingJitter = 0.3f;
+    p.scan = 1.0f;
+    e.setParams(p);
+    constexpr int kBlock = 256;
+    std::vector<float> l(kBlock), r(kBlock);
+    float* const pl = l.data();
+    float* const pr = r.data();
+    float peak = 0.0f;
+    std::size_t allocs = 0;
+    {
+        AllocationScope scope;
+        auto run = [&](int blocks) {
+            for (int i = 0; i < blocks; ++i) {
+                e.process(pl, pr, kBlock);
+                for (int k = 0; k < kBlock; ++k) peak = std::max({peak, std::abs(pl[k]), std::abs(pr[k])});
+            }
+        };
+        e.setPlaying(true);
+        run(60); // forward, wraps past the end
+        for (const float scan : {-1.0f, 0.37f, 0.0f, -0.02f, 1.0f}) {
+            p.scan = scan;
+            e.setParams(p); // rebase
+            run(30);
+        }
+        p.scan = std::numeric_limits<float>::quiet_NaN();
+        e.setParams(p); // clamps to 0
+        run(4);
+        e.setSource(&other); // reset on a new load
+        run(10);
+        e.stopNow(); // reset
+        e.setPlaying(true);
+        run(10);
+        e.setPlaying(false);
+        run(10); // fade-out completion resets
+        allocs = scope.count();
+    }
+    CHECK(allocs == 0);
+    CHECK(peak > kSoundThreshold);
 }

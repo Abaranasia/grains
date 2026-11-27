@@ -4,15 +4,21 @@
 #include <grains/EngineParams.h>
 #include <grains/Grain.h>
 #include <grains/GrainPool.h>
+#include <grains/GrainSnapshot.h>
 #include <grains/GrainScheduler.h>
 #include <grains/Interpolator.h>
 #include <grains/Rng.h>
 #include <grains/SampleBuffer.h>
+#include <grains/TransportGate.h>
 #include <grains/WindowTable.h>
 
 #include <cstdint>
 
 namespace grains {
+
+// Transport state right after prepare(). Plugins always start Stopped; tests that expect sound use
+// Playing, which skips the fade-in and keeps the render bit-identical to an ungated engine.
+enum class InitialTransport : std::uint8_t { Stopped, Playing };
 
 // Offline-friendly granular engine. Allocation-free: all storage is member data.
 //
@@ -55,8 +61,24 @@ public:
     GranularEngine(const GranularEngine&) = delete;
     GranularEngine& operator=(const GranularEngine&) = delete;
 
-    // Resets all state (pool, scheduler, rng). Sample rate is clamped to [8000, 384000].
-    void prepare(double sampleRate, std::uint64_t seed) noexcept;
+    // Resets all state (pool, scheduler, rng, transport) and stores the seed that every Play
+    // restarts from. Sample rate is clamped to [8000, 384000].
+    void prepare(double sampleRate, std::uint64_t seed, InitialTransport initial = InitialTransport::Stopped) noexcept;
+
+    // Level-triggered Play/Stop target, evaluated once at the start of the next process() call.
+    // Play from Stopped is a full restart (rng reseed, fresh pool and scheduler) with a ~20 ms
+    // fade-in; Stop fades out and then empties the pool; Stopped blocks are exact zeros, draw no
+    // random numbers and render no grains. A Play during the fade-out waits for it to finish.
+    void setPlaying(bool play) noexcept { target_ = play; }
+
+    // Hard stop with no fade: transport Stopped, target false, pool and scheduler reset. The loaded
+    // source is kept. setSource() itself never changes the transport.
+    void stopNow() noexcept;
+
+    // Read-only introspection (tests): the rng state, unchanged while Stopped (no draws).
+    std::uint64_t rngState() const noexcept { return rng_.state(); }
+
+    TransportGate::State transportState() const noexcept { return gate_.state(); }
 
     // Non-owning. The pointee must outlive its use and stay unchanged. Clears active grains.
     void setSource(const SampleBuffer* source) noexcept;
@@ -70,9 +92,22 @@ public:
     // Read-only introspection (tests): grains currently playing, at most GrainPool::kCapacity.
     int activeGrainCount() const noexcept { return pool_.activeCount(); }
 
+    // Read-only introspection (tests): the scan offset, in source lengths, at the current sample
+    // (R-GR-12). Not wrapped: it is the travelled distance plus the base.
+    double scanOffset() const noexcept { return offsetAt(elapsed_); }
+
+    // Display introspection (R-GR-11, R-WD-5): copies the active grains into `out` (count ==
+    // activeGrainCount()). A pure reader of the pool, source and window: it never changes the
+    // render, the RNG or the pool, and it never allocates. Call it between process() calls.
+    void snapshotGrains(GrainSnapshot& out) const noexcept;
+
 private:
     void renderSegment(float* left, float* right, int offset, int count) noexcept;
-    void spawn() noexcept;
+    // `at` is the absolute output sample of the spawn (elapsed_ + offset in the block).
+    void spawn(std::int64_t at) noexcept;
+    double offsetAt(std::int64_t at) const noexcept;
+    // Back to offset 0 at counter 0. Called wherever the scheduler restarts, and on a new source.
+    void resetScan() noexcept;
 
     Rng rng_;
     GrainScheduler scheduler_;
@@ -81,6 +116,15 @@ private:
     EngineParams params_;
     const SampleBuffer* source_ = nullptr;
     double sampleRate_ = limits::kSampleRateDefault;
+    TransportGate gate_;
+    std::uint64_t seed_ = 1;
+    bool target_ = false;
+
+    // Scan timeline (R-GR-12): an integer sample counter that mirrors the scheduler's, so the offset
+    // never depends on block boundaries. offset(t) = scanBase_ + scan * (t - scanFrom_) / sampleRate_.
+    std::int64_t elapsed_ = 0;
+    std::int64_t scanFrom_ = 0;
+    double scanBase_ = 0.0;
 };
 
 } // namespace grains

@@ -20,6 +20,7 @@ enum class Id : int {
     TimingJitter,
     PanSpread,
     Gain,
+    Scan, // appended last so the earlier slots keep their index
     Count
 };
 
@@ -34,11 +35,16 @@ struct Spec {
     float max;
     float def;
     float skew; // 1 = linear, power-curve exponent: plain = min + span * n^(1/skew)
+    // Apply the skew symmetrically about the range centre (bipolar controls: fine near the middle).
+    bool symmetric = false;
+    int versionHint = 1; // host parameter version; raised when a parameter is added after release
 };
 
 namespace detail {
 inline constexpr EngineParams kDefaults{};
 inline constexpr float kSkewWide = 0.3f; // wide log-like ranges (size, density)
+inline constexpr float kSkewScan = 0.4f; // scan: finer resolution near 0 (tuned by ear)
+inline constexpr int kScanVersionHint = 2; // scan was added after the first release
 } // namespace detail
 
 // Indexed by Id. Ranges and defaults derive from grains::limits and EngineParams{}.
@@ -57,17 +63,22 @@ inline constexpr std::array<Spec, kCount> kSpecs{{
     {"timingJitter", "Timing Jitter", "", 0.0f, 1.0f, detail::kDefaults.timingJitter, 1.0f},
     {"panSpread", "Pan Spread", "", 0.0f, 1.0f, detail::kDefaults.panSpread, 1.0f},
     {"gain", "Gain", "", 0.0f, limits::kGainMax, detail::kDefaults.gain, 1.0f},
+    {"scan", "Scan", "len/s", -limits::kScanMax, limits::kScanMax, detail::kDefaults.scan,
+     detail::kSkewScan, true, detail::kScanVersionHint},
 }};
 
 // Plain value -> [0, 1] knob position. Clamps to [min, max]; NaN is treated as the default.
-// Same maths as a skewed normalisable range (as used by common plugin frameworks).
+// Same maths as a skewed normalisable range (as used by common plugin frameworks), including
+// the symmetric variant: the skew is applied to the distance from the range centre.
 inline float toNormalised(const Spec& s, float plain) noexcept
 {
     if (std::isnan(plain)) plain = s.def;
     if (plain <= s.min) return 0.0f;
     if (plain >= s.max) return 1.0f;
     const float n = (plain - s.min) / (s.max - s.min);
-    return std::pow(n, s.skew);
+    if (!s.symmetric) return std::pow(n, s.skew);
+    const float d = 2.0f * n - 1.0f;
+    return (1.0f + std::pow(std::abs(d), s.skew) * (d < 0.0f ? -1.0f : 1.0f)) / 2.0f;
 }
 
 // [0, 1] knob position -> plain value. Clamps to [0, 1]; NaN yields the default.
@@ -76,7 +87,10 @@ inline float fromNormalised(const Spec& s, float norm) noexcept
     if (std::isnan(norm)) return s.def;
     if (norm <= 0.0f) return s.min;
     if (norm >= 1.0f) return s.max;
-    return s.min + (s.max - s.min) * std::exp(std::log(norm) / s.skew);
+    if (!s.symmetric) return s.min + (s.max - s.min) * std::exp(std::log(norm) / s.skew);
+    float d = 2.0f * norm - 1.0f;
+    if (d != 0.0f) d = std::exp(std::log(std::abs(d)) / s.skew) * (d < 0.0f ? -1.0f : 1.0f);
+    return s.min + (s.max - s.min) / 2.0f * (1.0f + d);
 }
 
 // Plain values (indexed by Id) -> engine parameters, already clamped. Density in (0, kDensityMin)
@@ -94,6 +108,7 @@ inline EngineParams toEngineParams(const std::array<float, kCount>& plain) noexc
     e.timingJitter = at(Id::TimingJitter);
     e.panSpread = at(Id::PanSpread);
     e.gain = at(Id::Gain);
+    e.scan = at(Id::Scan);
     return e.clamped();
 }
 

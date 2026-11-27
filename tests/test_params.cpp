@@ -126,3 +126,31 @@ TEST_CASE("params: pitch 100 clamps to the same value as 24", "[params]")
     b.pitchSemitones = 24.0f;
     CHECK(a.clamped().pitchSemitones == b.clamped().pitchSemitones);
 }
+
+// R-GR-12 "Scan is clamped and NaN-safe".
+TEST_CASE("params: scan defaults to 0 and passes in-range values through", "[params][scan]")
+{
+    const EngineParams d;
+    CHECK(d.scan == 0.0f);
+    for (const float v : {-1.0f, -0.37f, 0.0f, 0.25f, 1.0f}) {
+        EngineParams p;
+        p.scan = v;
+        CHECK(p.clamped().scan == v);
+    }
+}
+
+TEST_CASE("params: scan clamps to +-1 and NaN becomes 0", "[params][scan]")
+{
+    constexpr float kInf = std::numeric_limits<float>::infinity();
+    struct Case {
+        float in, out;
+    };
+    const Case cases[] = {{kNaN, 0.0f}, {kInf, 1.0f},  {-kInf, -1.0f}, {1.0e9f, 1.0f},
+                          {-1.0e9f, -1.0f}, {5.0f, 1.0f}, {-5.0f, -1.0f}};
+    for (const Case& c : cases) {
+        INFO("in=" << c.in);
+        EngineParams p;
+        p.scan = c.in;
+        CHECK(p.clamped().scan == c.out);
+    }
+}
