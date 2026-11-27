@@ -45,9 +45,9 @@ Note: budget is 800 here, not the default 400. Forecast is 800-900, so single-pr
 
 ## Phase 4: Loader and processor wiring (R-WD-3)
 
-- [ ] 4.1 `Source/plugin/SampleLoader.h/.cpp`: add `peaks`, `cleared` to `Result`; compute after `isCurrent()`, before `exchange_.stage`; `cleared` only on accepted clear commit; publish even if peaks null; redeliver on Reload (R-PS-8).
-- [ ] 4.2 `Source/plugin/PluginProcessor.h/.cpp`: `WaveformState waveform_`, `waveform()`, `parameter(id)` accessor; apply in `onLoadResult` in commit order before the label generation filter; broadcast on change.
-- [ ] 4.3 Verify `SourceExchange`, `processBlock`, engine untouched (diff check).
+- [x] 4.1 `Source/plugin/SampleLoader.h/.cpp`: add `peaks`, `cleared` to `Result`; compute after `isCurrent()`, before `exchange_.stage`; `cleared` only on accepted clear commit; publish even if peaks null; redeliver on Reload (R-PS-8).
+- [x] 4.2 `Source/plugin/PluginProcessor.h/.cpp`: `WaveformState waveform_`, `waveform()`, `parameter(id)` accessor; apply in `onLoadResult` in commit order before the label generation filter; broadcast on change.
+- [x] 4.3 Verify `SourceExchange`, `processBlock`, engine untouched (diff check).
 
 ## Phase 5: WaveformView and editor (R-WD-4, R-PS-6)
 

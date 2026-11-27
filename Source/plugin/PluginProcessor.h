@@ -5,6 +5,7 @@
 #include <grains/ParamSpec.h>
 #include <grains/SampleBuffer.h>
 #include <grains/SourceExchange.h>
+#include <grains/WaveformPeaks.h>
 
 #include "SampleLoader.h"
 
@@ -49,6 +50,10 @@ public:
     void loadFile(const juce::File& file);
     const juce::String& status() const noexcept { return status_; }
     juce::ChangeBroadcaster& statusBroadcaster() noexcept { return broadcaster_; }
+    // What the waveform view shows; changes are announced through statusBroadcaster().
+    const grains::WaveformState& waveform() const noexcept { return waveform_; }
+    // Parameter by id (e.g. "position"); nullptr when unknown.
+    juce::RangedAudioParameter* parameter(const juce::String& id) { return apvts_.getParameter(id); }
 
 private:
     void onLoadResult(const SampleLoader::Result& r);
@@ -66,6 +71,7 @@ private:
     int scratchSize_ = 0;
     std::atomic<std::uint64_t> restoreGeneration_{0}; // generation of the last setStateInformation request
     juce::String status_{"No sample"};
+    grains::WaveformState waveform_; // message thread only
     juce::ChangeBroadcaster broadcaster_;
     SampleLoader loader_;
 
