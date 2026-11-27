@@ -19,7 +19,9 @@ target_sources(GrainsPlugin PRIVATE
   PluginProcessor.cpp
   PluginProcessor.h
   SampleLoader.cpp
-  SampleLoader.h)
+  SampleLoader.h
+  WaveformView.cpp
+  WaveformView.h)
 
 target_compile_definitions(GrainsPlugin PUBLIC
   JUCE_WEB_BROWSER=0

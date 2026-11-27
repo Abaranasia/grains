@@ -5,12 +5,15 @@
 
 namespace {
 constexpr int kBarHeight = 40;
+constexpr int kViewHeight = 140;
 constexpr const char* kPatterns = "*.wav;*.aiff;*.aif";
 } // namespace
 
 GrainsEditor::GrainsEditor(GrainsAudioProcessor& p)
-    : juce::AudioProcessorEditor(p), proc_(p), generic_(p)
+    : juce::AudioProcessorEditor(p), proc_(p), view_(*p.parameter("position"), *p.parameter("positionJitter")),
+      generic_(p)
 {
+    addAndMakeVisible(view_);
     addAndMakeVisible(generic_);
     addAndMakeVisible(load_);
     addAndMakeVisible(status_);
@@ -26,8 +29,11 @@ GrainsEditor::GrainsEditor(GrainsAudioProcessor& p)
                               });
     };
 
+    view_.setWaveform(proc_.waveform()); // late-opened editor: pull what is already loaded
+
     proc_.statusBroadcaster().addChangeListener(this);
-    setSize(generic_.getWidth(), generic_.getHeight() + kBarHeight);
+    setResizable(false, false);
+    setSize(generic_.getWidth(), generic_.getHeight() + kBarHeight + kViewHeight);
 }
 
 GrainsEditor::~GrainsEditor()
@@ -41,6 +47,7 @@ void GrainsEditor::resized()
     auto bar = area.removeFromTop(kBarHeight).reduced(4);
     load_.setBounds(bar.removeFromLeft(100));
     status_.setBounds(bar.reduced(8, 0));
+    view_.setBounds(area.removeFromTop(kViewHeight));
     generic_.setBounds(area);
 }
 

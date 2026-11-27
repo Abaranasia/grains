@@ -51,10 +51,10 @@ Note: budget is 800 here, not the default 400. Forecast is 800-900, so single-pr
 
 ## Phase 5: WaveformView and editor (R-WD-4, R-PS-6)
 
-- [ ] 5.1 Create `Source/plugin/WaveformView.h/.cpp`: paint columns via `columnPeak`, marker, jitter band, hints (Empty/NoWaveform); no Timer.
-- [ ] 5.2 Mouse down/drag via `xToPosition` into `ParameterAttachment(position)` with begin/end gesture; `positionJitter` attachment callback-only repaint.
-- [ ] 5.3 `Source/plugin/PluginEditor.h/.cpp`: add view above generic editor (bar 40 + view 140 + generic), `setResizable(false, false)`, pull `proc_.waveform()` in constructor, update in `changeListenerCallback`.
-- [ ] 5.4 Register `WaveformView.cpp` in `Source/plugin/CMakeLists.txt`; Release build clean (Windows).
+- [x] 5.1 Create `Source/plugin/WaveformView.h/.cpp`: paint columns via `columnPeak`, marker, jitter band, hints (Empty/NoWaveform); no Timer.
+- [x] 5.2 Mouse down/drag via `xToPosition` into `ParameterAttachment(position)` with begin/end gesture; `positionJitter` attachment callback-only repaint.
+- [x] 5.3 `Source/plugin/PluginEditor.h/.cpp`: add view above generic editor (bar 40 + view 140 + generic), `setResizable(false, false)`, pull `proc_.waveform()` in constructor, update in `changeListenerCallback`.
+- [x] 5.4 Register `WaveformView.cpp` in `Source/plugin/CMakeLists.txt`; Release build clean (Windows).
 
 ## Phase 6: Manual verification (Standalone and DAW)
 
