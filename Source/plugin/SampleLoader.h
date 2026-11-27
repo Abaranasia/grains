@@ -4,6 +4,7 @@
 #include <grains/LoadPlanner.h>
 #include <grains/SampleBuffer.h>
 #include <grains/SourceExchange.h>
+#include <grains/WaveformPeaks.h>
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
@@ -27,6 +28,10 @@ public:
         juce::String path; // the loaded path, or the original request path on failure
         juce::String text; // status line for the UI
         bool relocated;    // loaded from a candidate other than the original path
+        // Overview of the committed source (also redelivered on a Reload). Null when not loaded, or when
+        // computing it failed: the source still plays and the view shows "no waveform".
+        std::shared_ptr<const grains::WaveformPeaks> peaks;
+        bool cleared; // true only when a clear commit was accepted (Restore with nothing or a missing file)
     };
     using Callback = std::function<void(const Result&)>;
 
@@ -57,7 +62,8 @@ private:
     // Frees any displaced or rejected Box after the gate unlocks. True when accepted.
     bool commitGated(const grains::LoadRequest& r, grains::SourceExchange<grains::SampleBuffer>::Staged s);
     void post(const grains::LoadRequest& r, bool loaded, const juce::String& text, const juce::String& path = {},
-              bool relocated = false);
+              bool relocated = false, std::shared_ptr<const grains::WaveformPeaks> peaks = nullptr,
+              bool cleared = false);
 
     grains::SourceExchange<grains::SampleBuffer>& exchange_;
     Callback onResult_;

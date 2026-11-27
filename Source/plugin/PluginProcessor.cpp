@@ -168,7 +168,14 @@ void GrainsAudioProcessor::onLoadResult(const SampleLoader::Result& r)
             apvts_.state.setProperty(kSampleRel, juce::String::fromUTF8(ref.relative.c_str()), nullptr);
         }
     }
-    if (r.generation < loader_.latestGeneration()) return; // superseded: only the label is filtered
+    // Waveform: applied in commit order, before the label filter, so the view always matches the
+    // source that is audible (a superseded load must not replace the peaks of a later commit, and a
+    // failed load that leaves the playing source alone changes nothing).
+    const bool waveformChanged = waveform_.apply(r.loaded, r.cleared, r.peaks);
+    if (r.generation < loader_.latestGeneration()) { // superseded: only the label is filtered
+        if (waveformChanged) broadcaster_.sendChangeMessage();
+        return;
+    }
     status_ = r.text;
     broadcaster_.sendChangeMessage();
 }
